@@ -159,6 +159,36 @@ input[type=range]::-moz-range-thumb{width:2px;height:12px;background:var(--mid);
 .words{display:flex; gap:16px; flex-wrap:wrap; align-items:baseline}
 .foot{display:flex; justify-content:space-between; align-items:baseline; margin-top:14px;
       padding-top:12px; border-top:1px solid var(--rule)}
+/* ── action bar ────────────────────────────────────────────────────── */
+.actionbar{display:flex; align-items:center; gap:10px; width:var(--sheet); min-height:26px; margin-top:18px}
+.act{position:relative; border:1px solid var(--rule); background:none; color:var(--dim); cursor:pointer;
+     padding:6px 14px; height:24px; display:flex; align-items:center; gap:6px; transition:.12s}
+.act:hover{background:var(--read); color:var(--bench)}
+.act.prime{color:var(--read); border-color:var(--rule-hot)}
+.act.prime:hover{background:var(--read); color:var(--bench)}
+.act.quiet{border-color:transparent; padding:6px 4px}
+.act.quiet:hover{background:none; color:var(--read)}
+.act.quiet.open{color:var(--read)}
+.act.quiet.open::after{content:''; position:absolute; left:0; right:0; bottom:-1px; height:1px; background:var(--read)}
+.armdot{display:none; width:5px; height:5px; background:var(--live); border-radius:50%}
+.armdot.on{display:block}
+.act.prime:hover .armdot{background:var(--bench)}
+.inkname{color:var(--dim); opacity:0; transition:opacity .3s; white-space:nowrap}
+.inkname.show{opacity:.8}
+.keptn{color:var(--dim); margin-left:8px}
+.keptn.pulse{animation:keptpulse .5s}
+@keyframes keptpulse{0%{color:var(--live)}100%{color:var(--dim)}}
+/* ── the bench panel ───────────────────────────────────────────────── */
+.bench{max-height:min(72vh, 640px); overflow-y:auto; background:#181b1d}
+.benchgroup{padding:4px 0 16px}
+.benchgroup + .benchgroup{border-top:1px solid var(--rule); padding-top:16px}
+.ghead{color:var(--read); letter-spacing:.14em; text-transform:uppercase; font-size:9px; margin-bottom:12px;
+       display:flex; align-items:baseline; gap:14px}
+.gnote{color:var(--dim); text-transform:none; letter-spacing:0; opacity:.75}
+.benchcols{display:grid; grid-template-columns:repeat(auto-fit, minmax(240px, 1fr)); gap:14px 28px; align-items:start}
+.benchcols .col{display:flex; flex-direction:column; gap:12px}
+.hint{display:none; color:var(--live)}
+.hint.on{display:inline}
 /* ── shelf: kept drawings ──────────────────────────────────────────── */
 .shelfrow{display:flex; gap:14px; overflow-x:auto; padding-bottom:4px; min-height:104px; align-items:flex-start}
 .keepcard{position:relative; flex:none; width:104px; cursor:pointer}
@@ -172,7 +202,7 @@ input[type=range]::-moz-range-thumb{width:2px;height:12px;background:var(--mid);
 .keepcard:hover .x{display:flex}
 .keepcard .x:hover{color:var(--read)}
 .shelfempty{color:var(--dim); font:400 10px/1.6 "IBM Plex Mono",monospace; align-self:center}
-.bare .ident,.bare .rail,.bare .slug,.bare .progress{opacity:0;pointer-events:none}
+.bare .ident,.bare .rail,.bare .actionbar,.bare .progress{opacity:0;pointer-events:none}
 .hidden{position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0)}
 .click-pulse{position:absolute;width:26px;height:26px;margin:-13px 0 0 -13px;border:2px solid var(--live);
   border-radius:50%;pointer-events:none;animation:pulse .6s ease-out forwards;z-index:5}
@@ -226,178 +256,143 @@ input[type=range]::-moz-range-thumb{width:2px;height:12px;background:var(--mid);
     <span class="crop br"><i class="h" style="right:0;bottom:0"></i><i class="v" style="right:0;bottom:0"></i></span>
   </div>
 
-  <div class="slug">
-    <button class="seg" data-d="plate"><span class="k eng">Plate</span><span class="v" id="v-plate">classic</span></button>
-    <span class="divider"></span>
-    <button class="seg" data-d="form"><span class="k eng">Form</span><span class="v" id="v-form">organic</span></button>
-    <span class="divider"></span>
-    <button class="seg" data-d="growth"><span class="k eng">Growth</span><span class="v" id="v-growth">64</span></button>
-    <span class="divider"></span>
-    <button class="seg" data-d="ink"><span class="k eng">Ink</span><span class="v inks" id="v-ink"><i></i><i></i><i></i><i></i></span></button>
-    <span class="divider"></span>
-    <button class="seg" data-d="sheet"><span class="k eng">Sheet</span><span class="v" id="v-sheet">square</span></button>
-    <span class="divider"></span>
-    <button class="seg" data-d="shelf"><span class="k eng">Shelf</span><span class="v" id="v-shelf">empty</span></button>
+  <div class="actionbar">
+    <button class="act prime eng" onclick="newDrawing()" title="grow a fresh drawing (space)">New drawing<i class="armdot" id="armdot" title="settings changed — they shape this next drawing"></i></button>
+    <button class="act eng" onclick="newInks()" title="fresh colors on this drawing (i)">New inks</button>
+    <button class="act eng" onclick="keepDrawing()" title="keep this drawing on the shelf (k)">Keep</button>
+    <span class="inkname eng" id="inkname"></span>
     <span class="spacer"></span>
-    <button class="regen eng" onclick="keepDrawing()" title="keep this drawing on the shelf (k)" style="margin-right:8px">Keep</button>
-    <button class="regen eng" onclick="regenerate()">Regenerate</button>
+    <button class="act quiet eng" data-d="bench" onclick="drawer('bench')">Everything else<span class="keptn" id="kept-count"></span></button>
   </div>
   <div class="progress"><i id="prog"></i></div>
 
-  <!-- PLATE -->
-  <div class="drawer" id="d-plate">
-    <div class="row" style="margin-bottom:14px">
-      <span class="eng">Preset</span>
-      <div class="segstrip" data-k="preset">
-        <button data-v="classic">classic</button><button data-v="circuit">circuit</button>
-        <button data-v="topography">topo</button><button data-v="meander">meander</button>
-        <button data-v="mandala">mandala</button><button data-v="coloring">coloring</button>
-        <button data-v="tree">tree</button><button data-v="textile">textile</button>
-      </div>
-    </div>
-    <div class="cols">
-      <div class="col">
-        <div class="row"><span class="eng">Start with</span>
-          <div class="segstrip" data-k="startEmpty"><button data-v="off">grown</button><button data-v="on">empty</button></div></div>
-        <div class="row"><span class="eng">Grow from a name</span>
-          <div style="display:flex;gap:12px;align-items:baseline">
-            <input id="name-input" class="field" placeholder="a word">
-            <button class="word eng" onclick="growFromName()">Grow</button></div></div>
-      </div>
-      <div class="mid"></div>
-      <div class="col">
-        <div class="row"><span class="eng">Fill a shape</span>
-          <div style="display:flex;gap:12px;align-items:baseline">
-            <input id="shape-text" class="field" placeholder="type a word">
-            <button class="word eng" onclick="setTextMask(document.getElementById('shape-text').value)">Fill</button></div></div>
-        <div class="row"><span class="eng">Or an image</span>
-          <div style="display:flex;gap:14px;align-items:baseline">
-            <input id="shape-file" type="file" accept="image/*" class="hidden" onchange="setImageMask(this.files[0])">
-            <button class="word eng" onclick="document.getElementById('shape-file').click()">Image &#8593;</button>
-            <button class="word eng" onclick="clearMask()">Clear fill</button></div></div>
-      </div>
-    </div>
-    <div class="foot">
-      <span class="eng" style="opacity:.75">esc close &middot; 1&ndash;5 tools &middot; &larr;&rarr; seed &middot; space random &middot; r regenerate &middot; h hide</span>
-      <span class="words"><button class="word eng" onclick="clearZones()">Clear zones</button>
-      <button class="word eng" onclick="blankCanvas()">Clear canvas</button>
-      <button class="word eng" onclick="resetParameters()">Reset</button></span>
-    </div>
-  </div>
+  <!-- THE BENCH: everything else, one panel -->
+  <div class="drawer bench" id="d-bench">
 
-  <!-- FORM -->
-  <div class="drawer" id="d-form">
-    <div class="cols">
-      <div class="col">
-        <div class="row"><span class="eng">Style</span>
-          <div class="segstrip" data-k="style"><button data-v="organic">organic</button><button data-v="angular">angular</button><button data-v="flowing">flowing</button></div></div>
-        <div class="row"><span class="eng">Endings</span>
-          <div class="segstrip" data-multi="shapes"><button data-v="circles">spirals</button><button data-v="triangles">triangles</button><button data-v="squares">squares</button><button data-v="lines">lines</button></div></div>
-        <div class="row"><span class="eng">Symmetry</span>
-          <div class="segstrip" data-k="symmetry"><button data-v="off">off</button><button data-v="mirror">mirror</button><button data-v="rot2">2</button><button data-v="rot4">4</button><button data-v="rot6">6</button></div></div>
-        <div class="row"><span class="eng">Doodles</span>
-          <div class="segstrip" data-k="doodles"><button data-v="on">all</button><button data-v="geometric">geometric</button><button data-v="playful">playful</button><button data-v="off">off</button></div></div>
-        <div class="row"><span class="eng">Finer infill passes</span>
-          <div class="segstrip" data-k="detail"><button data-v="on">on</button><button data-v="off">off</button></div></div>
+    <div class="benchgroup">
+      <div class="ghead eng">Shelf<span class="gnote eng" id="shelf-note">kept drawings — click one to bring it back</span></div>
+      <div class="shelfrow" id="shelf-row"></div>
+    </div>
+
+    <div class="benchgroup">
+      <div class="ghead eng">Look</div>
+      <div class="row" style="margin-bottom:14px">
+        <span class="eng">Preset</span>
+        <div class="segstrip" data-k="preset">
+          <button data-v="classic">classic</button><button data-v="circuit">circuit</button>
+          <button data-v="topography">topo</button><button data-v="meander">meander</button>
+          <button data-v="mandala">mandala</button><button data-v="coloring">coloring</button>
+          <button data-v="tree">tree</button><button data-v="textile">textile</button>
+        </div>
       </div>
-      <div class="mid"></div>
-      <div class="col">
-        <div class="row"><div class="rowhead"><span class="eng">Start from</span><span class="val" id="origin-name">scattered</span></div><div class="grid8" data-k="origin" id="origingrid"></div></div>
-        <div class="row"><span class="eng">Mark the start</span>
-          <div class="segstrip" data-k="originMark"><button data-v="triangle">mark</button><button data-v="off">off</button></div></div>
-        <div class="row"><div class="rowhead"><span class="eng">Zigzags</span><span class="val" id="zigzagChance-value">6</span></div>
-          <input type="range" id="zigzagChance" min="0" max="20" step="1" value="6" oninput="liveVal(this)" onchange="updateParam('zigzagChance',this.value)"></div>
-        <div class="row"><div class="rowhead"><span class="eng">Zigzag sharpness</span><span class="val" id="zigAngle-value">60</span></div>
-          <input type="range" id="zigAngle" min="30" max="80" step="2" value="60" oninput="liveVal(this)" onchange="updateParam('zigAngle',this.value)"></div>
-        <div class="row" id="row-lattice"><div class="rowhead"><span class="eng">Grid angle</span><span class="val" id="latticeAngle-value">60</span></div>
-          <div class="segstrip" data-k="latticeAngle" data-num="1"><button data-v="30">30&deg;</button><button data-v="36">36&deg;</button><button data-v="45">45&deg;</button><button data-v="60">60&deg;</button><button data-v="90">90&deg;</button></div></div>
-        <div class="row"><span class="eng">Rhythm</span>
-          <div class="segstrip" data-k="rhythm"><button data-v="off">off</button><button data-v="loose">loose</button><button data-v="strict">strict</button></div></div>
+      <div class="benchcols">
+        <div class="col">
+          <div class="row"><span class="eng">Style</span>
+            <div class="segstrip" data-k="style"><button data-v="organic">organic</button><button data-v="angular">angular</button><button data-v="flowing">flowing</button></div></div>
+          <div class="row"><span class="eng" title="click: only this &middot; shift-click: add or remove">Endings</span>
+            <div class="segstrip" data-multi="shapes"><button data-v="circles">spirals</button><button data-v="triangles">triangles</button><button data-v="squares">squares</button><button data-v="lines">lines</button></div></div>
+          <div class="row"><span class="eng">Symmetry</span>
+            <div class="segstrip" data-k="symmetry"><button data-v="off">off</button><button data-v="mirror">mirror</button><button data-v="rot2">2</button><button data-v="rot4">4</button><button data-v="rot6">6</button></div></div>
+          <div class="row" id="row-lattice"><div class="rowhead"><span class="eng">Grid angle</span><span class="val" id="latticeAngle-value">60</span></div>
+            <div class="segstrip" data-k="latticeAngle" data-num="1"><button data-v="30">30&deg;</button><button data-v="36">36&deg;</button><button data-v="45">45&deg;</button><button data-v="60">60&deg;</button><button data-v="90">90&deg;</button></div></div>
+        </div>
+        <div class="col">
+          <div class="row"><div class="rowhead"><span class="eng">Start from</span><span class="val" id="origin-name">scattered</span></div><div class="grid8" data-k="origin" id="origingrid"></div></div>
+          <div class="row"><div class="rowhead"><span class="eng">Density</span><span class="val" id="tendrilCount-value">64</span></div>
+            <input type="range" id="tendrilCount" min="12" max="160" step="4" value="64" oninput="liveVal(this)" onchange="updateParam('tendrilCount',this.value)"></div>
+          <div class="row"><div class="rowhead"><span class="eng">Line thickness</span><span class="val" id="lineWidth-value">1.5</span><span class="val hint" id="lw-hint">regrow for thicker</span></div>
+            <input type="range" id="lineWidth" min="0.5" max="10" step="0.25" value="1.5" oninput="liveVal(this); updateParam('lineWidth',this.value)"></div>
+        </div>
+        <div class="col">
+          <div class="row"><span class="eng">Colours <span class="gnote eng">restyle this drawing live</span></span>
+            <div class="swatches">
+              <label class="sw"><input type="color" id="bgcolor" value="#1e1c18" onchange="updateBg(this.value)"><span id="bgcolor-value">#1e1c18</span></label>
+              <label class="sw"><input type="color" id="color1" value="#743b16" onchange="updateColor(0,this.value)"><span id="color1-value">#743b16</span></label>
+              <label class="sw"><input type="color" id="color2" value="#c97b4a" onchange="updateColor(1,this.value)"><span id="color2-value">#c97b4a</span></label>
+              <label class="sw"><input type="color" id="color3" value="#7fa08a" onchange="updateColor(2,this.value)"><span id="color3-value">#7fa08a</span></label>
+            </div></div>
+          <div class="row"><span class="eng">Ink by</span>
+            <div class="segstrip" data-k="colorMode"><button data-v="lineage">family</button><button data-v="generation">generation</button><button data-v="mono">single</button></div></div>
+          <div class="row"><span class="eng">Doodles</span>
+            <div class="segstrip" data-k="doodles"><button data-v="on">all</button><button data-v="geometric">geometric</button><button data-v="playful">playful</button><button data-v="off">off</button></div></div>
+        </div>
       </div>
     </div>
-  </div>
 
-  <!-- GROWTH -->
-  <div class="drawer" id="d-growth">
-    <div class="cols">
-      <div class="col">
-        <div class="row"><div class="rowhead"><span class="eng">Density</span><span class="val" id="tendrilCount-value">64</span></div>
-          <input type="range" id="tendrilCount" min="12" max="160" step="4" value="64" oninput="liveVal(this)" onchange="updateParam('tendrilCount',this.value)"></div>
-        <div class="row"><div class="rowhead"><span class="eng">Line length</span><span class="val" id="lengthScale-value">1</span></div>
-          <input type="range" id="lengthScale" min="0.4" max="2.5" step="0.1" value="1" oninput="liveVal(this)" onchange="updateParam('lengthScale',this.value)"></div>
-        <div class="row"><div class="rowhead"><span class="eng">Branching</span><span class="val" id="branching-value">4</span></div>
-          <input type="range" id="branching" min="0" max="12" step="1" value="4" oninput="liveVal(this)" onchange="updateParam('branching',this.value)"></div>
-        <div class="row"><div class="rowhead"><span class="eng">How soon lines end</span><span class="val" id="coilTendency-value">4</span></div>
-          <input type="range" id="coilTendency" min="1" max="14" step="1" value="4" oninput="liveVal(this)" onchange="updateParam('coilTendency',this.value)"></div>
-        <div class="row"><div class="rowhead"><span class="eng">Line spacing</span><span class="val" id="clearance-value">11</span></div>
-          <input type="range" id="clearance" min="6" max="22" step="1" value="11" oninput="liveVal(this)" onchange="updateParam('clearance',this.value)"></div>
+    <div class="benchgroup">
+      <div class="ghead eng">Advanced</div>
+      <div class="benchcols">
+        <div class="col">
+          <div class="row"><div class="rowhead"><span class="eng">Line length</span><span class="val" id="lengthScale-value">1</span></div>
+            <input type="range" id="lengthScale" min="0.4" max="2.5" step="0.1" value="1" oninput="liveVal(this)" onchange="updateParam('lengthScale',this.value)"></div>
+          <div class="row"><div class="rowhead"><span class="eng">Branching</span><span class="val" id="branching-value">4</span></div>
+            <input type="range" id="branching" min="0" max="12" step="1" value="4" oninput="liveVal(this)" onchange="updateParam('branching',this.value)"></div>
+          <div class="row"><div class="rowhead"><span class="eng">How soon lines end</span><span class="val" id="coilTendency-value">4</span></div>
+            <input type="range" id="coilTendency" min="1" max="14" step="1" value="4" oninput="liveVal(this)" onchange="updateParam('coilTendency',this.value)"></div>
+          <div class="row"><div class="rowhead"><span class="eng">Line spacing</span><span class="val" id="clearance-value">11</span></div>
+            <input type="range" id="clearance" min="6" max="22" step="1" value="11" oninput="liveVal(this)" onchange="updateParam('clearance',this.value)"></div>
+          <div class="row"><div class="rowhead"><span class="eng">Zigzags</span><span class="val" id="zigzagChance-value">6</span></div>
+            <input type="range" id="zigzagChance" min="0" max="20" step="1" value="6" oninput="liveVal(this)" onchange="updateParam('zigzagChance',this.value)"></div>
+          <div class="row"><div class="rowhead"><span class="eng">Zigzag sharpness</span><span class="val" id="zigAngle-value">60</span></div>
+            <input type="range" id="zigAngle" min="30" max="80" step="2" value="60" oninput="liveVal(this)" onchange="updateParam('zigAngle',this.value)"></div>
+        </div>
+        <div class="col">
+          <div class="row"><span class="eng">Rhythm</span>
+            <div class="segstrip" data-k="rhythm"><button data-v="off">off</button><button data-v="loose">loose</button><button data-v="strict">strict</button></div></div>
+          <div class="row"><span class="eng">Sees the page</span>
+            <div class="segstrip" data-k="vacancy"><button data-v="off">off</button><button data-v="on">on</button></div></div>
+          <div class="row"><span class="eng">Finer infill passes</span>
+            <div class="segstrip" data-k="detail"><button data-v="on">on</button><button data-v="off">off</button></div></div>
+          <div class="row"><span class="eng">Mark the start</span>
+            <div class="segstrip" data-k="originMark"><button data-v="triangle">mark</button><button data-v="off">off</button></div></div>
+          <div class="row"><span class="eng">Render</span>
+            <div class="segstrip" data-k="render"><button data-v="animated">animated</button><button data-v="instant">instant</button></div></div>
+          <div class="row"><div class="rowhead"><span class="eng">Growth speed</span><span class="val" id="growthSpeed-value">10</span></div>
+            <input type="range" id="growthSpeed" min="1" max="30" step="1" value="10" oninput="liveVal(this)" onchange="updateParam('growthSpeed',this.value)"></div>
+          <div class="row"><div class="rowhead"><span class="eng">Click length</span><span class="val" id="clickLength-value">120</span></div>
+            <input type="range" id="clickLength" min="20" max="600" step="10" value="120" oninput="liveVal(this)" onchange="updateParam('clickLength',this.value)"></div>
+        </div>
+        <div class="col">
+          <div class="row"><span class="eng">Start with</span>
+            <div class="segstrip" data-k="startEmpty"><button data-v="off">grown</button><button data-v="on">empty</button></div></div>
+          <div class="row"><span class="eng">Grow from a name</span>
+            <div style="display:flex;gap:12px;align-items:baseline">
+              <input id="name-input" class="field" placeholder="a word">
+              <button class="word eng" onclick="growFromName()">Grow</button></div></div>
+          <div class="row"><span class="eng">Fill a shape</span>
+            <div style="display:flex;gap:12px;align-items:baseline">
+              <input id="shape-text" class="field" placeholder="type a word">
+              <button class="word eng" onclick="setTextMask(document.getElementById('shape-text').value)">Fill</button></div></div>
+          <div class="row"><span class="eng">Or an image</span>
+            <div style="display:flex;gap:14px;align-items:baseline">
+              <input id="shape-file" type="file" accept="image/*" class="hidden" onchange="setImageMask(this.files[0])">
+              <button class="word eng" onclick="document.getElementById('shape-file').click()">Image &#8593;</button>
+              <button class="word eng" onclick="clearMask()">Clear fill</button></div></div>
+          <div class="row" id="row-contour"><span class="eng">Trace the outline</span>
+            <div class="segstrip" data-k="contour"><button data-v="on">on</button><button data-v="off">off</button></div></div>
+          <div class="row"><span class="eng">Paper size</span>
+            <div class="segstrip" data-k="paper"><button data-v="square">square</button><button data-v="a4">a4</button><button data-v="a3">a3</button><button data-v="a2">a2</button></div></div>
+          <div class="row"><span class="eng">Fewer pen lifts</span>
+            <div class="segstrip" data-k="stitch"><button data-v="off">free</button><button data-v="on">joined</button><button data-v="single">one line</button></div></div>
+          <div class="row"><span class="eng">Seamless tiling</span>
+            <div class="segstrip" data-k="tile"><button data-v="off">off</button><button data-v="on">on</button></div></div>
+          <div class="row"><span class="eng">Save &amp; share</span>
+            <div class="words">
+              <button class="word eng" onclick="downloadPNG()">PNG</button>
+              <button class="word eng" onclick="downloadSVG()">SVG</button>
+              <button class="word eng" onclick="downloadAnimatedSVG()">Animated SVG</button>
+              <button class="word eng" id="share-btn" onclick="copyShareLink()">Link &#8599;</button>
+            </div></div>
+        </div>
       </div>
-      <div class="mid"></div>
-      <div class="col">
-        <div class="row"><div class="rowhead"><span class="eng">Line thickness</span><span class="val" id="lineWidth-value">1.5</span></div>
-          <input type="range" id="lineWidth" min="0.5" max="10" step="0.25" value="1.5" oninput="liveVal(this)" onchange="updateParam('lineWidth',this.value)"></div>
-        <div class="row"><div class="rowhead"><span class="eng">Growth speed</span><span class="val" id="growthSpeed-value">10</span></div>
-          <input type="range" id="growthSpeed" min="1" max="30" step="1" value="10" oninput="liveVal(this)" onchange="updateParam('growthSpeed',this.value)"></div>
-        <div class="row"><div class="rowhead"><span class="eng">Click length</span><span class="val" id="clickLength-value">120</span></div>
-          <input type="range" id="clickLength" min="20" max="600" step="10" value="120" oninput="liveVal(this)" onchange="updateParam('clickLength',this.value)"></div>
-        <div class="row"><span class="eng">Render</span>
-          <div class="segstrip" data-k="render"><button data-v="animated">animated</button><button data-v="instant">instant</button></div></div>
-        <div class="row"><span class="eng">Sees the page</span>
-          <div class="segstrip" data-k="vacancy"><button data-v="off">off</button><button data-v="on">on</button></div></div>
+      <div class="foot">
+        <span class="eng" style="opacity:.75">esc close &middot; space new drawing &middot; i new inks &middot; k keep &middot; &larr;&rarr; seed &middot; r regrow same seed &middot; 1&ndash;5 tools &middot; h hide</span>
+        <span class="words"><button class="word eng" onclick="regenerate()">Regrow same seed</button>
+        <button class="word eng" onclick="clearZones()">Clear zones</button>
+        <button class="word eng" onclick="blankCanvas()">Clear canvas</button>
+        <button class="word eng" onclick="resetParameters()">Reset</button></span>
       </div>
     </div>
-  </div>
-
-  <!-- INK -->
-  <div class="drawer" id="d-ink">
-    <div class="cols">
-      <div class="col">
-        <div class="row"><span class="eng">Colours</span>
-          <div class="swatches">
-            <label class="sw"><input type="color" id="bgcolor" value="#1e1c18" onchange="updateBg(this.value)"><span id="bgcolor-value">#1e1c18</span></label>
-            <label class="sw"><input type="color" id="color1" value="#743b16" onchange="updateColor(0,this.value)"><span id="color1-value">#743b16</span></label>
-            <label class="sw"><input type="color" id="color2" value="#c97b4a" onchange="updateColor(1,this.value)"><span id="color2-value">#c97b4a</span></label>
-            <label class="sw"><input type="color" id="color3" value="#7fa08a" onchange="updateColor(2,this.value)"><span id="color3-value">#7fa08a</span></label>
-          </div></div>
-      </div>
-      <div class="mid"></div>
-      <div class="col">
-        <div class="row"><span class="eng">Ink by</span>
-          <div class="segstrip" data-k="colorMode"><button data-v="lineage">family</button><button data-v="generation">generation</button><button data-v="mono">single</button></div></div>
-      </div>
-    </div>
-  </div>
-
-  <!-- SHEET -->
-  <div class="drawer" id="d-sheet">
-    <div class="cols">
-      <div class="col">
-        <div class="row"><span class="eng">Paper size</span>
-          <div class="segstrip" data-k="paper"><button data-v="square">square</button><button data-v="a4">a4</button><button data-v="a3">a3</button><button data-v="a2">a2</button></div></div>
-        <div class="row"><span class="eng">Fewer pen lifts</span>
-          <div class="segstrip" data-k="stitch"><button data-v="off">free</button><button data-v="on">joined</button><button data-v="single">one line</button></div></div>
-        <div class="row"><span class="eng">Seamless tiling</span>
-          <div class="segstrip" data-k="tile"><button data-v="off">off</button><button data-v="on">on</button></div></div>
-        <div class="row" id="row-contour"><span class="eng">Trace the outline</span>
-          <div class="segstrip" data-k="contour"><button data-v="on">on</button><button data-v="off">off</button></div></div>
-      </div>
-      <div class="mid"></div>
-      <div class="col">
-        <div class="row"><span class="eng">Export</span>
-          <div class="words">
-            <button class="word eng" onclick="downloadPNG()">PNG</button>
-            <button class="word eng" onclick="downloadSVG()">SVG</button>
-            <button class="word eng" onclick="downloadAnimatedSVG()">Animated SVG</button>
-            <button class="word eng" id="share-btn" onclick="copyShareLink()">Link &#8599;</button>
-          </div></div>
-        <div class="row"><span class="eng" style="opacity:.7">svg exports at 1200 &times; 1200 &middot; one layer per ink</span></div>
-      </div>
-    </div>
-  </div>
-
-  <!-- SHELF -->
-  <div class="drawer" id="d-shelf">
-    <div class="shelfrow" id="shelf-row"></div>
   </div>
 </div>
 
@@ -1967,8 +1962,7 @@ input[type=range]::-moz-range-thumb{width:2px;height:12px;background:var(--mid);
             // guessed: when no pocket can hold this pass's smallest legal
             // element, skip the wave of darts and move on immediately
             const lvl2 = growPhase === 'detail2' ? 0.32 : growPhase === 'detail' ? 0.55 : 1;
-            const noRoom = params.vacancy === 'on' &&
-                           !vacHasRoom(clr() * lvl2 * (maskArr ? 0.6 : 1.5));
+            const noRoom = params.vacancy === 'on' && !vacHasRoom(clr() * lvl2);
             if (noRoom || spawnBranchWave() === 0) {
                 if (noRoom || ++emptyWaves >= (maskArr ? 10 : 3)) {   // narrow shapes: more misses per hit
                     if (growPhase === 'primary' && params.detail !== 'off') {
@@ -2184,6 +2178,9 @@ input[type=range]::-moz-range-thumb{width:2px;height:12px;background:var(--mid);
         // colonise whatever space is left, until no pocket can hold a line.
         function initializeSystem() {
             randomSeed(params.seed);
+            // what the drawing is grown WITH — repaint must respect these even
+            // if the user re-arms the settings afterwards (two-lane contract)
+            grown = { symmetry: params.symmetry, tile: params.tile, lineWidth: params.lineWidth };
             noiseSeed(params.seed);
 
             cellSize = clr();
@@ -2328,7 +2325,14 @@ input[type=range]::-moz-range-thumb{width:2px;height:12px;background:var(--mid);
             return t.colIdx;
         }
 
-        function lwOf(t) { return Math.max(0.35, params.lineWidth * (t.scale === undefined ? 1 : t.scale)); }
+        let grown = null;       // settings the current geometry was grown with
+        // The pen the RENDER uses. Live thickness edits repaint the existing
+        // geometry, but never past 2.2x the grown width — beyond that, lines
+        // that never touched would LOOK like they touch. Regrow lifts the cap.
+        function effLW() {
+            return grown ? Math.min(params.lineWidth, grown.lineWidth * 2.2) : params.lineWidth;
+        }
+        function lwOf(t) { return Math.max(0.35, effLW() * (t.scale === undefined ? 1 : t.scale)); }
 
         // a wrapped line jumps the page; break it so it renders as the two
         // (or more) real strokes a tiled sheet would show
@@ -2385,7 +2389,7 @@ input[type=range]::-moz-range-thumb{width:2px;height:12px;background:var(--mid);
             for (let i = 0; i < doodles.length; i++) {
                 const d = doodles[i];
                 stroke(params.colorPalette[params.colorMode === 'mono' ? 0 : d.colIdx]);
-                strokeWeight(params.lineWidth);
+                strokeWeight(effLW());
                 noFill();
                 for (const poly of d.polys) drawPoly(poly);
                 noStroke();
@@ -2542,21 +2546,27 @@ input[type=range]::-moz-range-thumb{width:2px;height:12px;background:var(--mid);
         // (Under seamless tiling the field does not see across the seam —
         // it slightly overestimates room there, which only biases darts.)
         const VACN = MASKN;
-        let vacField = null, vacStamp = -1;
+        let vacField = null, vacStamp = -1, vacBuf = null;
 
         function buildVacancy() {
             const N = VACN, BIG = 1e6;
-            const d = new Float32Array(N * N);
+            if (!vacBuf) vacBuf = new Float32Array(N * N);   // one buffer, reused
+            const d = vacBuf;
             const inner = Math.ceil(MARGIN / (W / N));
             for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
                 const i = y * N + x;
                 const edge = !tiling() && (x < inner || x >= N - inner || y < inner || y >= N - inner);
                 d[i] = (edge || (maskArr && !inMask((x + 0.5) * W / N, (y + 0.5) * H / N))) ? 0 : BIG;
             }
+            const wrap = tiling();
             grid.forEach(arr => {
                 for (let i = 0; i < arr.length; i++) {
-                    const gx = Math.min(N - 1, Math.max(0, Math.floor(arr[i].x * N / W)));
-                    const gy = Math.min(N - 1, Math.max(0, Math.floor(arr[i].y * N / H)));
+                    let gx = Math.floor(arr[i].x * N / W), gy = Math.floor(arr[i].y * N / H);
+                    if (wrap) { gx = ((gx % N) + N) % N; gy = ((gy % N) + N) % N; }
+                    else {
+                        gx = Math.min(N - 1, Math.max(0, gx));
+                        gy = Math.min(N - 1, Math.max(0, gy));
+                    }
                     d[gy * N + gx] = 0;
                 }
             });
@@ -2593,10 +2603,26 @@ input[type=range]::-moz-range-thumb{width:2px;height:12px;background:var(--mid);
 
         // Is any pocket left that could hold the smallest legal element of
         // the current pass? An exact answer to "is the drawing done" — the
-        // measured replacement for counting failed dart waves.
-        function vacHasRoom(need) {
+        // measured replacement for counting failed dart waves. `base` is the
+        // pass clearance, clr() * pass scale. Inside a mask the requirement
+        // is PER CELL: narrow strokes legitimately host tighter births
+        // (maskScaleAt shrinks the working clearance down to 0.4×), so one
+        // uniform threshold would declare thin letters full while the
+        // spawner could still colonize them — measured, that bug halved a
+        // thin-stroke fill. Mirror the spawner's own arithmetic instead.
+        function vacHasRoom(base) {
             buildVacancy();               // wave boundary: measure fresh
-            const lim = need / (W / VACN);
+            const sc = W / VACN;
+            if (maskArr && maskDistField) {
+                for (let i = 0; i < vacField.length; i++) {
+                    if (!vacField[i]) continue;
+                    const scale = Math.max(0.4, Math.min(1, 2 * maskDistField[i] * sc / (clr() * 4)));
+                    const cLoc = Math.max(params.lineWidth * 2.2, base * scale);
+                    if (vacField[i] * sc >= cLoc * 1.05) return true;
+                }
+                return false;
+            }
+            const lim = base * 1.5 / sc;
             for (let i = 0; i < vacField.length; i++) if (vacField[i] >= lim) return true;
             return false;
         }
@@ -2700,10 +2726,12 @@ input[type=range]::-moz-range-thumb{width:2px;height:12px;background:var(--mid);
                 if (vacField && params.vacancy === 'on') {
                     const rr = Math.ceil(cHere * 1.6 / (W / VACN));
                     const cgx = Math.floor(tgt.x * VACN / W), cgy = Math.floor(tgt.y * VACN / H);
+                    const wrapR = tiling();
                     for (let dy = -rr; dy <= rr; dy++) for (let dx = -rr; dx <= rr; dx++) {
-                        const gx2 = cgx + dx, gy2 = cgy + dy;
-                        if (gx2 >= 0 && gx2 < VACN && gy2 >= 0 && gy2 < VACN)
-                            vacField[gy2 * VACN + gx2] = Math.min(vacField[gy2 * VACN + gx2], 1);
+                        let gx2 = cgx + dx, gy2 = cgy + dy;
+                        if (wrapR) { gx2 = ((gx2 % VACN) + VACN) % VACN; gy2 = ((gy2 % VACN) + VACN) % VACN; }
+                        else if (gx2 < 0 || gx2 >= VACN || gy2 < 0 || gy2 >= VACN) continue;
+                        vacField[gy2 * VACN + gx2] = Math.min(vacField[gy2 * VACN + gx2], 1);
                     }
                 }
                 spawned++;
@@ -2938,42 +2966,57 @@ input[type=range]::-moz-range-thumb{width:2px;height:12px;background:var(--mid);
         // UI CONTROL HANDLERS
         // ═══════════════════════════════════════════════════════════════════════
 
+        // ── TWO LANES ────────────────────────────────────────────────────
+        // Paint (colors, background, thickness, ink-by) restyles the EXISTING
+        // drawing in place. Structure (everything else) only arms the setting:
+        // nothing regrows until the user explicitly asks. armSetting is a
+        // chrome hook — a no-op stub here so the engine runs headless.
+        function armSetting() { if (typeof paintArmed === 'function') paintArmed(); }
+
+        // repaint the finished geometry with current paint — but with the
+        // symmetry/tiling it was GROWN with, since those are baked into it
+        function repaintInk() {
+            if (typeof isLooping === 'function' && isLooping()) return; // live frames repaint anyway
+            if (!grown) { renderFinal(); return; }
+            const s = params.symmetry, t = params.tile;
+            params.symmetry = grown.symmetry; params.tile = grown.tile;
+            renderFinal();
+            params.symmetry = s; params.tile = t;
+        }
+
         function updateParam(name, value) {
             const v = parseFloat(value);
             params[name] = v;
             document.getElementById(name + '-value').textContent = value;
-            // growthSpeed and clickLength take effect without re-growing;
-            // everything else rebuilds the drawing
-            if (name !== 'growthSpeed' && name !== 'clickLength') initializeSystem();
+            if (name === 'lineWidth') {
+                repaintInk(); armSetting();                // paint lane (armed too: regrow lifts the cap)
+                const hint = document.getElementById('lw-hint');
+                if (hint) hint.classList.toggle('on', grown && v > grown.lineWidth * 2.2);
+                return;
+            }
+            if (name === 'growthSpeed' || name === 'clickLength') return;      // free lane
+            armSetting();                                                      // structure lane
         }
 
-        function updateOrigin(value) {
-            params.origin = value;
-            initializeSystem();
-        }
+        function updateOrigin(value) { params.origin = value; armSetting(); }
 
-        function updateStyle(value) {
-            params.style = value;
-            initializeSystem();
-        }
+        function updateStyle(value) { params.style = value; armSetting(); }
 
-        function updateEndings(value) {
-            params.endings = value;
-            initializeSystem();
-        }
+        function updateEndings(value) { params.endings = value; armSetting(); }
 
         function updateSelect(name, value) {
             params[name] = value;
             // paper size, stroke joining and stamp shape affect export or the
             // next click only — never the drawing that is already on the sheet
             if (name === 'paper' || name === 'stitch' || name === 'stampKind') return;
-            initializeSystem();
+            if (name === 'colorMode') { repaintInk(); return; }                // paint lane
+            armSetting();                                                      // structure lane
         }
 
         function updateBg(value) {
             params.bg = value;
             document.getElementById('bgcolor-value').textContent = value;
-            initializeSystem();
+            repaintInk();
         }
 
         // NOTE: setTool lives in the chrome script at the end of this file — it
@@ -3018,7 +3061,7 @@ input[type=range]::-moz-range-thumb{width:2px;height:12px;background:var(--mid);
         function updateColor(i, value) {
             params.colorPalette[i] = value;
             document.getElementById('color' + (i + 1) + '-value').textContent = value;
-            initializeSystem();
+            repaintInk();
         }
 
         function regenerate() { initializeSystem(); }
@@ -3077,7 +3120,7 @@ input[type=range]::-moz-range-thumb{width:2px;height:12px;background:var(--mid);
             for (let i = 0; i < doodles.length; i++) {
                 const d = doodles[i];
                 const ci = params.colorMode === 'mono' ? 0 : d.colIdx;
-                for (const poly of d.polys) push(ci, params.lineWidth, poly);
+                for (const poly of d.polys) push(ci, effLW(), poly);
             }
             return out;
         }
@@ -3137,7 +3180,7 @@ input[type=range]::-moz-range-thumb{width:2px;height:12px;background:var(--mid);
             // doodles are detached decorations: they stay their own strokes
             for (const d of doodles) {
                 const ci = params.colorMode === 'mono' ? 0 : d.colIdx;
-                for (const poly of d.polys) if (poly.length > 1) paths.push({ ci, w: params.lineWidth, pts: poly });
+                for (const poly of d.polys) if (poly.length > 1) paths.push({ ci, w: effLW(), pts: poly });
             }
             return paths;
         }
@@ -3395,11 +3438,18 @@ input[type=range]::-moz-range-thumb{width:2px;height:12px;background:var(--mid);
                     colorMode: 'generation' }
         };
 
+        let presetKeys = [];    // keys the currently applied preset wrote
         function applyPreset(name) {
-            params = JSON.parse(JSON.stringify(defaultParams));
-            Object.assign(params, JSON.parse(JSON.stringify(PRESETS[name] || {})));
+            const patch = PRESETS[name] || {};
+            // revert only what the OUTGOING preset had set — user tweaks survive
+            for (const k of presetKeys) if (!(k in patch))
+                params[k] = JSON.parse(JSON.stringify(defaultParams[k]));
+            Object.assign(params, JSON.parse(JSON.stringify(patch)));
+            presetKeys = Object.keys(patch);
+            params.shapes = params.endings === 'mixed' || !params.endings
+                ? ['circles', 'triangles', 'squares'] : [params.endings];
             syncControls();
-            initializeSystem();
+            armSetting();
         }
 
         window.addEventListener('load', function() {
@@ -3453,7 +3503,7 @@ const svg = d => '<svg viewBox="0 0 16 16">' + d + '</svg>';
 // route a strip click to whichever engine setter owns that key
 function setKey(k, v, numeric){
   if (numeric) { params[k] = parseFloat(v); const o = document.getElementById(k + '-value');
-                 if (o) o.textContent = v; initializeSystem();
+                 if (o) o.textContent = v; armSetting();
                  if (typeof saveSettings === 'function') saveSettings(); return; }
   if (k === 'preset') return applyPreset(v);
   if (k === 'style')  return updateStyle(v);
@@ -3462,22 +3512,25 @@ function setKey(k, v, numeric){
 }
 document.querySelectorAll('.segstrip, .grid8').forEach(strip => {
   const k = strip.dataset.k, multi = strip.dataset.multi;
-  strip.querySelectorAll('button').forEach(b => b.addEventListener('click', () => {
-    if (multi) { toggleShape(b.dataset.v); return; }
+  strip.querySelectorAll('button').forEach(b => b.addEventListener('click', ev => {
+    if (multi) { toggleShape(b.dataset.v, ev.shiftKey); return; }
     setKey(k, b.dataset.v, strip.dataset.num); paintChrome();
   }));
 });
 
-// Endings are a SET. Turning shapes on and off is the whole control — the
-// combination you leave switched on IS the mix. One must always remain.
-function toggleShape(v){
-  const set = params.shapes.slice();
-  const at = set.indexOf(v);
-  if (at >= 0) { if (set.length === 1) return; set.splice(at, 1); }
-  else set.push(v);
+// Endings are a SET, but the common wish is "just this one": a plain click
+// selects only the clicked shape; shift-click adds/removes it from the mix.
+// One must always remain. Structure lane: arms, never regrows.
+function toggleShape(v, additive){
+  let set = params.shapes.slice();
+  if (additive){
+    const at = set.indexOf(v);
+    if (at >= 0) { if (set.length > 1) set.splice(at, 1); }
+    else set.push(v);
+  } else set = [v];
   params.shapes = set;
   params.endings = (set.length === 1) ? set[0] : 'mixed';
-  initializeSystem();
+  armSetting();
   paintChrome();
 }
 
@@ -3497,22 +3550,21 @@ let openDrawer = null, activePreset = 'classic';
 function drawer(name){
   const same = openDrawer === name;
   document.querySelectorAll('.drawer').forEach(d => d.classList.remove('on'));
-  document.querySelectorAll('.seg').forEach(sg => sg.classList.remove('open'));
+  document.querySelectorAll('[data-d]').forEach(sg => sg.classList.remove('open'));
   document.getElementById('dim').classList.toggle('on', !same && !!name);
   openDrawer = same ? null : name;
   if (openDrawer){
-    document.getElementById('d-' + openDrawer).classList.add('on');
-    document.querySelector('.seg[data-d="'+openDrawer+'"]').classList.add('open');
+    const panel = document.getElementById('d-' + openDrawer);
+    if (panel) panel.classList.add('on');
+    const btn = document.querySelector('[data-d="'+openDrawer+'"]');
+    if (btn) btn.classList.add('open');
   }
 }
-document.querySelectorAll('.seg').forEach(sg =>
-  sg.addEventListener('click', () => drawer(sg.dataset.d)));
 document.getElementById('dim').addEventListener('click', () => drawer(null));
 
 const _applyPreset = window.applyPreset;
 window.applyPreset = function(n){
   activePreset = n; _applyPreset(n);
-  params.shapes = params.endings === 'mixed' ? ['circles','triangles','squares'] : [params.endings];
   paintChrome();
 };
 
@@ -3544,20 +3596,11 @@ function paintChrome(){
     r.style.setProperty('--p', ((r.value - r.min) / (r.max - r.min) * 100) + '%'));
   document.getElementById('railext').querySelectorAll('button').forEach(b =>
     b.classList.toggle('on', b.dataset.v === params.stampKind));
-  const t = id => document.getElementById(id);
-  t('v-plate').textContent = activePreset;
-  const shapeWords = { circles:'spirals', triangles:'triangles', squares:'squares', lines:'lines' };
-  t('v-form').textContent  = params.style + ' · ' +
-    params.shapes.map(x => shapeWords[x] || x).join('+') + ' · ' + params.origin +
-                             (params.symmetry !== 'off' ? ' · ' + params.symmetry : '') +
-                             (params.rhythm !== 'off' ? ' · rhythm' : '');
-  t('v-growth').textContent = params.tendrilCount + ' · ' + params.lineWidth + 'pt · ' + params.render +
-                              (params.vacancy === 'on' ? ' · sees page' : '');
-  t('v-sheet').textContent = params.paper + ' · ' + ({on:'joined', single:'one line'}[params.stitch] || 'free') +
-                             (params.tile === 'on' ? ' · tiling' : '');
-  const inks = [params.bg].concat(params.colorPalette);
-  t('v-ink').querySelectorAll('i').forEach((sq, n) => sq.style.background = inks[n]);
   document.getElementById('canvas-container').style.background = params.bg;
+  // the thickness cap hint: visible only when the slider outruns the grown width
+  const hint = document.getElementById('lw-hint');
+  if (hint) hint.classList.toggle('on',
+    typeof grown === 'object' && grown && params.lineWidth > grown.lineWidth * 2.2);
   // only show what currently applies — the fastest way to make a panel simple
   const show = (id, yes) => { const e = document.getElementById(id); if (e) e.style.display = yes ? '' : 'none'; };
   show('row-lattice', params.style === 'angular');
@@ -3595,9 +3638,152 @@ addEventListener('keydown', e => {
   else if (k === 'r') regenerate();
   else if (k === 'k') keepDrawing();
   else if (k === 'h') document.body.classList.toggle('bare');
+  else if (k === 'i') newInks();
   else if ('12345'.includes(k)) setTool(['plant','draw','stamp','erase','clear'][+k - 1]);
-  else if ('pfgis'.includes(k)) drawer({p:'plate',f:'form',g:'growth',i:'ink',s:'sheet'}[k]);
+  else if ('pfgse'.includes(k)) drawer('bench');
 });
+
+// ── THE INK FORGE ────────────────────────────────────────────────────
+// "New inks": one press, one fresh set of colors that always works on a
+// dark ground. Seeds come from a bundled book of artist-made palettes
+// (chromotome, MIT), then every pick is renormalized in OKLCH: background
+// forced dark, three inks lifted bright and pushed apart. Deterministic
+// from its own counter — rule 47: it never touches the drawing's seed.
+// OKLCH palette normalizer — the exact code destined for the page, testable in node.
+// Takes any curated palette and forges: 1 guaranteed-dark background + 3 distinct
+// bright inks, deterministically from a counter (namespaced LCG, no p5 random()).
+
+// ---- sRGB <-> OKLab/OKLCH (Björn Ottosson's published matrices) ----
+function s2l(u) { return u <= 0.04045 ? u / 12.92 : Math.pow((u + 0.055) / 1.055, 2.4); }
+function l2s(u) { return u <= 0.0031308 ? u * 12.92 : 1.055 * Math.pow(u, 1 / 2.4) - 0.055; }
+function hex2ok(hex) {
+    const n = parseInt(hex.replace('#', ''), 16);
+    const r = s2l(((n >> 16) & 255) / 255), g = s2l(((n >> 8) & 255) / 255), b = s2l((n & 255) / 255);
+    const l = Math.cbrt(0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b);
+    const m = Math.cbrt(0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b);
+    const s = Math.cbrt(0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b);
+    const L = 0.2104542553 * l + 0.793617785 * m - 0.0040720468 * s;
+    const A = 1.9779984951 * l - 2.428592205 * m + 0.4505937099 * s;
+    const B = 0.0259040371 * l + 0.7827717662 * m - 0.808675766 * s;
+    return { L, C: Math.hypot(A, B), H: Math.atan2(B, A) };
+}
+function ok2rgb(L, C, H) {
+    const A = C * Math.cos(H), B = C * Math.sin(H);
+    const l = (L + 0.3963377774 * A + 0.2158037573 * B) ** 3;
+    const m = (L - 0.1055613458 * A - 0.0638541728 * B) ** 3;
+    const s = (L - 0.0894841775 * A - 1.291485548 * B) ** 3;
+    return [
+        4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s,
+        -1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s,
+        -0.0041960863 * l - 0.7034186147 * m + 1.707614701 * s,
+    ];
+}
+function inGamut(rgb) { return rgb.every(u => u >= -1e-4 && u <= 1 + 1e-4); }
+// gamut-map by chroma reduction, never by RGB clamping
+function ok2hex(L, C, H) {
+    let lo = 0, hi = C;
+    if (!inGamut(ok2rgb(L, C, H))) {
+        for (let i = 0; i < 20; i++) {
+            const mid = (lo + hi) / 2;
+            if (inGamut(ok2rgb(L, mid, H))) lo = mid; else hi = mid;
+        }
+        C = lo;
+    }
+    const rgb = ok2rgb(L, C, H).map(u => Math.round(l2s(Math.min(1, Math.max(0, u))) * 255));
+    return '#' + rgb.map(v => v.toString(16).padStart(2, '0')).join('');
+}
+function maxChroma(L, H) {         // largest in-gamut chroma at this L and hue
+    let lo = 0, hi = 0.4;
+    for (let i = 0; i < 20; i++) {
+        const mid = (lo + hi) / 2;
+        if (inGamut(ok2rgb(L, mid, H))) lo = mid; else hi = mid;
+    }
+    return lo;
+}
+function okDist(a, b) {
+    const dA = a.C * Math.cos(a.H) - b.C * Math.cos(b.H);
+    const dB = a.C * Math.sin(a.H) - b.C * Math.sin(b.H);
+    return Math.hypot(a.L - b.L, dA, dB);
+}
+
+// ---- the forge ----
+// PALS: [[name, [hex...], bgHint|null], ...]  n: press counter (any integer)
+function forgeInks(PALS, n) {
+    let s = (n * 2654435761) >>> 0 || 1;               // namespaced LCG — not p5's stream
+    const rng = () => ((s = (s * 1664525 + 1013904223) >>> 0), s / 4294967296);
+    const pal = PALS[Math.floor(rng() * PALS.length)];
+    const spin = (rng() - 0.5) * 1.1;                  // whole-palette hue rotation, ±~31deg
+    const cols = pal[1].map(h => { const o = hex2ok(h); o.H += spin; return o; });
+
+    // background: the palette's darkest hue, forced into the dark band
+    const darkest = cols.reduce((a, b) => (b.L < a.L ? b : a));
+    const bgL = 0.14 + rng() * 0.07;
+    const bg = ok2hex(bgL, Math.min(darkest.C, 0.032), darkest.H);
+
+    // inks: greedy max-min pick of 3 among the rest, then lift into the bright band
+    const rest = cols.filter(c => c !== darkest);
+    while (rest.length < 3) rest.push({ L: 0.7, C: 0.1, H: darkest.H + Math.PI * (0.33 + rest.length * 0.33) });
+    const picked = [rest[Math.floor(rng() * rest.length)]];
+    while (picked.length < 3) {
+        let best = null, bestD = -1;
+        for (const c of rest) {
+            if (picked.includes(c)) continue;
+            const d = Math.min(...picked.map(p => okDist(p, c)));
+            if (d > bestD) { bestD = d; best = c; }
+        }
+        picked.push(best);
+    }
+    const inks = picked.map((c, i) => {
+        const L = 0.68 + (i / 2) * 0.15 + (rng() - 0.5) * 0.04;   // spread across 0.68-0.85
+        return { L: Math.min(0.86, Math.max(0.66, L)), C: Math.max(0.06, maxChroma(L, c.H) * 0.85), H: c.H };
+    });
+    // enforce ink separation: if two are too close, push hues apart
+    for (let i = 0; i < 3; i++) for (let j = i + 1; j < 3; j++) {
+        if (okDist(inks[i], inks[j]) < 0.09) inks[j].H += 1.1;
+    }
+    return { name: pal[0], bg, inks: inks.map(k => ok2hex(k.L, Math.min(k.C, maxChroma(k.L, k.H) * 0.9), k.H)) };
+}
+
+
+const INK_PALS = [["frozen-rose",["#29368f","#e9697b","#1b164d","#f7d996"],"#f2e8e4"],["winter-night",["#122438","#dd672e","#87c7ca","#ebebeb"],"#ebebeb"],["saami",["#eab700","#e64818","#2c6393","#eecfca"],"#e7e6e4"],["knotberry1",["#20342a","#f74713","#686d2c","#e9b4a6"],"#e5ded8"],["knotberry2",["#1d3b1a","#eb4b11","#e5bc00","#f29881"],"#eae2d0"],["tricolor",["#ec643b","#56b7ab","#f8cb57","#1f1e43"],"#f7f2df"],["foxshelter",["#ff3931","#007861","#311f27","#bab9a4"],"#dddddd"],["hermes",["#253852","#51222f","#b53435","#ecbb51"],"#eeccc2"],["olympia",["#ff3250","#ffb33a","#008c36","#0085c6","#4c4c4c"],"#faf2e5"],["byrnes",["#c54514","#dca215","#23507f"],"#e8e7d4"],["butterfly",["#f40104","#f6c0b3","#99673a","#f0f1f4"],"#191e36"],["floratopia",["#bf4a2b","#cd902a","#4e4973","#f5d4bc"],"#1e1a43"],["verena",["#f1594a","#f5b50e","#14a160","#2969de","#885fa4"],"#e2e6e8"],["florida_citrus",["#ea7251","#ebf7f0","#02aca5"],"#9ae2d3"],["lemon_citrus",["#e2d574","#f1f4f7","#69c5ab"],"#f79eac"],["yuma_punk",["#f05e3b","#ebdec4","#ffdb00"],"#161616"],["yuma_punk2",["#f2d002","#f7f5e1","#ec643b"],"#f7f5e1"],["moir",["#a49f4f","#d4501e","#f7c558","#ebbaa6"],"#f7f4ef"],["sprague",["#ec2f28","#f8cd28","#1e95bb","#fbaab3","#fcefdf"],"#fcefdf"],["bloomberg",["#ff5500","#f4c145","#144714","#2f04fc","#e276af"],"#fff3dd"],["revolucion",["#ed555d","#fffcc9","#41b797","#eda126","#7b5770"],"#2d1922"],["sneaker",["#e8165b","#401e38","#66c3b4","#ee7724","#584098"],"#ffffff"],["miradors",["#ff6936","#fddc3f","#0075ca","#00bb70"],"#020202"],["kaffeprat",["#BCAA8C","#D8CDBE","#484A42","#746B58","#9A8C73"],"#fff"],["jrmy",["#df456c","#ea6a82","#270b32","#471e43"],"#ef9198"],["animo",["#f6c103","#f6f6f6","#d1cdc7","#e7e6e5"],"#f5f5f5"],["book",["#be1c24","#d1a082","#037b68","#d8b1a5","#1c2738","#c95a3f"],"#f5b28a"],["juxtapoz",["#20357e","#f44242","#ffffff"],"#cfc398"],["hurdles",["#e16503","#dc9a0f","#dfe2b4","#66a7a6"],"#3c1c03"],["ludo",["#df302f","#e5a320","#0466b3","#0f7963"],"#dedccd"],["riff",["#e24724","#c7c7c7","#1f3e7c","#d29294","#010203"],"#f2f2f2"],["san ramon",["#4f423a","#f6a74b","#589286","#f8e9e2","#2c2825"],"#fff"],["one-dress",["#1767D2","#FFFFFF","#F9AB00","#212121"],"#fff"],["rag-mysore",["#ec6c26","#613a53","#e8ac52","#639aa0"],"#d5cda1"],["rag-gol",["#d3693e","#803528","#f1b156","#90a798"],"#f0e0a4"],["rag-belur",["#f46e26","#68485f","#3d273a","#535d55"],"#dcd4a6"],["rag-bangalore",["#ea720e","#ca5130","#e9c25a","#52534f"],"#f9ecd3"],["rag-taj",["#ce565e","#8e1752","#f8a100","#3ac1a6"],"#efdea2"],["rag-virupaksha",["#f5736a","#925951","#feba4c","#9d9b9d"],"#eedfa2"],["retro",["#69766f","#9ed6cb","#f7e5cc","#9d8f7f","#936454","#bf5c32","#efad57"],null],["retro-washedout",["#878a87","#cbdbc8","#e8e0d4","#b29e91","#9f736c","#b76254","#dfa372"],null],["roygbiv-warm",["#705f84","#687d99","#6c843e","#fc9a1a","#dc383a","#aa3a33","#9c4257"],null],["roygbiv-toned",["#817c77","#396c68","#89e3b7","#f59647","#d63644","#893f49","#4d3240"],null],["present-correct",["#fd3741","#fe4f11","#ff6800","#ffa61a","#ffc219","#ffd114","#fcd82e","#f4d730","#ced562","#8ac38f","#79b7a0","#72b5b1","#5b9bae","#6ba1b7","#49619d","#604791","#721e7f","#9b2b77","#ab2562","#ca2847"],null],["tundra1",["#40708c","#8e998c","#5d3f37","#ed6954","#f2e9e2"],null],["tundra2",["#5f9e93","#3d3638","#733632","#b66239","#b0a1a4","#e3dad2"],null],["tundra3",["#87c3ca","#7b7377","#b2475d","#7d3e3e","#eb7f64","#d9c67a","#f3f2f2"],null],["tundra4",["#d53939","#b6754d","#a88d5f","#524643","#3c5a53","#7d8c7c","#dad6cd"],null],["cc239",["#e3dd34","#78496b","#f0527f","#a7e0e2"],"#e0eff0"],["cc234",["#ffce49","#ede8dc","#ff5736","#ff99b4"],"#f7f4ed"],["cc232",["#5c5f46","#ff7044","#ffce39","#66aeaa"],"#e9ecde"],["cc238",["#553c60","#ffb0a0","#ff6749","#fbe090"],"#f5e9de"],["cc242",["#bbd444","#fcd744","#fa7b53","#423c6f"],"#faf4e4"],["cc245",["#0d4a4e","#ff947b","#ead3a2","#5284ab"],"#f6f4ed"],["cc273",["#363d4a","#7b8a56","#ff9369","#f4c172"],"#f0efe2"],["rohlfs_1R",["#004996","#567bae","#ff4c48","#ffbcb3"],"#fff8e7"],["rohlfs_1Y",["#004996","#567bae","#ffc000","#ffdca4"],"#fff8e7"],["rohlfs_1G",["#004996","#567bae","#60bf3c","#d2deb1"],"#fff8e7"],["rohlfs_2",["#4d3d9a","#f76975","#ffffff","#eff0dd"],"#58bdbc"],["rohlfs_3",["#abdfdf","#fde500","#58bdbc","#eff0dd"],"#f76975"],["rohlfs_4",["#fde500","#2f2043","#f76975","#eff0dd"],"#fbbeca"],["ducci_jb",["#395e54","#e77b4d","#050006","#e55486"],"#efe0bc"],["ducci_a",["#809498","#d3990e","#000000","#ecddc5"],"#863f52"],["ducci_b",["#ecddc5","#79b27b","#000000","#ac6548"],"#d5c08e"],["ducci_d",["#f3cb4d","#f2f5e3","#20191b","#67875c"],"#433d5f"],["ducci_e",["#c37c2b","#f6ecce","#000000","#386a7a"],"#e3cd98"],["ducci_f",["#596f7e","#eae6c7","#463c21","#f4cb4c"],"#e67300"],["ducci_g",["#c75669","#000000","#11706a"],"#ecddc5"],["ducci_h",["#6b5c6e","#4a2839","#d9574a"],"#ffc34b"],["ducci_i",["#e9dcad","#143331","#ffc000"],"#a74c02"],["ducci_j",["#c47c2b","#5f5726","#000000","#7e8a84"],"#ecddc5"],["ducci_o",["#c15e1f","#e4a13a","#000000","#4d545a"],"#dfc79b"],["ducci_q",["#4bae8c","#d0c1a0","#2d3538"],"#d06440"],["ducci_u",["#f6d700","#f2d692","#000000","#5d3552"],"#ff7426"],["ducci_v",["#c65f75","#d3990e","#000000","#597e7a"],"#f6eccb"],["ducci_x",["#dd614a","#f5cedb","#1a1e4f"],"#fbb900"],["jud_playground",["#f04924","#fcce09","#408ac9"],"#ffffff"],["jud_horizon",["#f8c3df","#f2e420","#28b3d0","#648731","#ef6a7d"],"#f2f0e1"],["jud_mural",["#ca3122","#e5af16","#4a93a2","#0e7e39","#e2b9bd"],"#e3ded8"],["jud_cabinet",["#f0afb7","#f6bc12","#1477bb","#41bb9b"],"#e3ded8"],["iiso_zeitung",["#ee8067","#f3df76","#00a9c0","#f7ab76"],"#f5efcb"],["iiso_curcuit",["#f0865c","#f2b07b","#6bc4d2","#1a3643"],"#f0f0e8"],["iiso_airlines",["#fe765a","#ffb468","#4b588f","#faf1e0"],"#fae5c8"],["iiso_daily",["#e76c4a","#f0d967","#7f8cb6","#1daeb1","#ef9640"],"#e2ded2"],["kov_01",["#d24c23","#7ba6bc","#f0c667","#ede2b3","#672b35","#142a36"],"#108266"],["kov_02",["#e8dccc","#e94641","#eeaeae"],"#6c96be"],["kov_03",["#e3937b","#d93f1d","#090d15","#e6cca7"],"#558947"],["kov_04",["#d03718","#292b36","#33762f","#ead7c9","#ce7028","#689d8d"],"#deb330"],["kov_05",["#de3f1a","#de9232","#007158","#e6cdaf","#869679"],"#7aa5a6"],["kov_06",["#a87c2a","#bdc9b1","#f14616","#ecbfaf","#017724","#0e2733","#2b9ae9"],"#dfd4c1"],["kov_06b",["#d57846","#dfe0cc","#de442f","#e7d3c5","#5ec227","#302f35","#63bdb3"],"#dfd4c1"],["kov_07",["#c91619","#fdecd2","#f4a000","#4c2653"],"#89c2cd"],["tsu_arcade",["#4aad8b","#e15147","#f3b551","#cec8b8","#d1af84","#544e47"],"#cfc7b9"],["tsu_harutan",["#75974a","#c83e3c","#f39140","#e4ded2","#f8c5a4","#434f55"],"#cfc7b9"],["tsu_akasaka",["#687f72","#cc7d6c","#dec36f","#dec7af","#ad8470","#424637"],"#cfc7b9"],["dt13",["#f5f2d3","#f5f2d3","#fbd6b8"],"#ec5525"],["hilda01",["#ec5526","#f4ac12","#9ebbc1","#f7f4e2"],"#e7e8d4"],["hilda02",["#eb5627","#eebb20","#4e9eb8","#f7f5d0"],"#77c1c0"],["hilda03",["#e95145","#f8b917","#b8bdc1","#ffb2a2"],"#6b7752"],["hilda04",["#e95145","#f6bf7a","#589da1","#f5d9bc"],"#f5ede1"],["hilda05",["#ff6555","#ffb58f","#d8eecf","#8c4b47","#bf7f93"],"#ffda82"],["hilda06",["#f75952","#ffce84","#74b7b2","#f6f6f6","#b17d71"],"#f6ecd4"],["spatial01",["#ff5937","#f6f6f4","#4169ff"],"#f6f6f4"],["spatial02",["#ff5937","#f6f6f4","#f6f6f4"],"#f6f6f4"],["spatial02i",["#f6f6f4","#ff5937","#ff5937"],"#ff5937"],["spatial03",["#4169ff","#f6f6f4","#f6f6f4"],"#f6f6f4"],["spatial03i",["#f6f6f4","#4169ff","#4169ff"],"#4169ff"],["jung_bird",["#fc3032","#fed530","#33c3fb","#ff7bac","#fda929"],"#ffffff"],["jung_horse",["#e72e81","#f0bf36","#3056a2"],"#ffffff"],["jung_croc",["#f13274","#eed03e","#405e7f","#19a198"],"#ffffff"],["jung_hippo",["#ff7bac","#ff921e","#3ea8f5","#7ac943"],"#ffffff"],["jung_wolf",["#e51c39","#f1b844","#36c4b7","#666666"],"#ffffff"],["system.#01",["#ff4242","#fec101","#1841fe","#fcbdcc","#82e9b5"],"#fff"],["system.#02",["#ff4242","#ffd480","#1e365d","#edb14c","#418dcd"],"#fff"],["system.#03",["#f73f4a","#d3e5eb","#002c3e","#1aa1b1","#ec6675"],"#fff"],["system.#04",["#e31f4f","#f0ac3f","#18acab","#26265a","#ea7d81","#dcd9d0"],"#26265a"],["system.#05",["#db4549","#d1e1e1","#3e6a90","#2e3853","#a3c9d3"],"#fff"],["system.#06",["#e5475c","#95b394","#28343b","#f7c6a3","#eb8078"],"#fff"],["system.#07",["#d75c49","#f0efea","#509da4"],"#fff"],["system.#08",["#f6625a","#92b29f","#272c3f"],"#fff"],["empusa",["#c92a28","#e69301","#1f8793","#13652b","#e7d8b0","#48233b","#e3b3ac"],"#f0f0f2"],["delphi",["#475b62","#7a999c","#2a1f1d","#fbaf3c","#df4a33","#f0e0c6","#af592c"],"#f0e0c6"],["mably",["#13477b","#2f1b10","#d18529","#d72a25","#e42184","#138898","#9d2787","#7f311b"],"#dfc792"],["nowak",["#e85b30","#ef9e28","#c6ac71","#e0c191","#3f6279","#ee854e","#180305"],"#ede4cb"],["jupiter",["#c03a53","#edd09e","#aab5af","#023629","#eba735","#8e9380","#6c4127"],"#e6e2d6"],["hersche",["#df9f00","#1f6f50","#8e6d7f","#da0607","#a4a5a7","#d3d1c3","#42064f","#25393a"],"#f0f5f6"],["cherfi",["#99cb9f","#cfb610","#d00701","#dba78d","#2e2c1d","#bfbea2","#d2cfaf"],"#e3e2c5"],["harvest",["#313a42","#9aad2e","#f0ae3c","#df4822","#8eac9b","#cc3d3f","#ec8b1c","#1b9268"],"#e5e2cf"],["honey",["#f14d42","#f4fdec","#4fbe5d","#265487","#f6e916","#f9a087","#2e99d6"],"#f4fdec"],["jungle",["#adb100","#e5f4e9","#f4650f","#4d6838","#cb9e00","#689c7d","#e2a1a8","#151c2e"],"#cecaa9"],["skyspider",["#f4b232","#f2dbbd","#01799c","#e93e48","#0b1952","#006748","#ed817d"],"#f0dbbc"],["atlas",["#5399b1","#f4e9d5","#de4037","#ed942f","#4e9e48","#7a6e62"],"#f0c328"],["giftcard",["#FBF5E9","#FF514E","#FDBC2E","#4561CC","#2A303E","#6CC283","#A71172","#238DA5","#9BD7CB","#231E58","#4E0942"],"#FBF5E9"],["giftcard_sub",["#FBF5E9","#FF514E","#FDBC2E","#4561CC","#2A303E","#6CC283","#238DA5","#9BD7CB"],"#FBF5E9"],["dale_paddle",["#ff7a5a","#765aa6","#fee7bc","#515e8c","#ffc64a","#b460a6","#ffffff","#4781c1"],"#abe9e8"],["dale_night",["#ae5d9d","#f1e8bc","#ef8fa3","#f7c047","#58c9ed","#f77150"],"#00ae83"],["dale_cat",["#f77656","#f7f7f7","#efc545","#dfe0e2","#3c70bd","#66bee4"],"#f6e0b8"],["cako1",["#000000","#d55a3a","#2a5c8a","#7e7d14","#dbdac9"],"#f4e9d5"],["cako2",["#dbdac9","#d55a3a","#2a5c8a","#b47b8c","#7e7d14"],"#000000"],["cako2_sub1",["#dbdac9","#d55a3a","#2a5c8a"],"#000000"],["cako2_sub2",["#dbdac9","#d55a3a","#7e7d14"],"#000000"],["mayo1",["#ea510e","#ffd203","#0255a3","#039177","#111111"],"#fff"],["mayo2",["#ea663f","#f9cc27","#84afd7","#7ca994","#f1bbc9","#242424"],"#f5f6f1"],["mayo3",["#ea5b19","#f8c9b9","#137661","#2a2a2a"],"#f5f4f0"],["exposito",["#8bc9c3","#ffae43","#ea432c","#228345","#d1d7d3","#524e9c","#9dc35e","#f0a1a1"],"#000000"],["exposito_sub1",["#8bc9c3","#ffae43","#ea432c","#524e9c"],"#000000"],["exposito_sub2",["#8bc9c3","#ffae43","#ea432c","#524e9c","#f0a1a1","#228345"],"#000000"],["exposito_sub3",["#ffae43","#ea432c","#524e9c","#f0a1a1"],"#000000"],["candy-wrap",["#f19797","#f9b73e","#ee5151","#fb671f","#6bbe3a","#0c75b7","#0b9e4e","#763f68"],"#e7ded5"],["slicks",["#e1decd","#d95336","#e6ac1d"],"#e1decd"],["circus",["#3eb79e","#f4a910","#f37377","#207986","#f26003","#afce95"],"#eadcb6"],["spotlight",["#f34312","#00a49e","#ef888f","#f5b408","#412432"],"#dfdcd5"],["five-stars",["#f5e8c7","#d9dcad","#cf3933","#f3f4f4","#74330d","#8bb896","#eba824","#f05c03"],"#ecd598"],["full-moon",["#f7e8be","#aa879f","#f6634e"],"#f7e8be"],["sunday-stroll",["#d44c4c","#e47781","#f5d274","#f7e8be","#acbe55","#6fb97a","#5ba150","#037750","#003e5e","#595373","#73659e","#ac879f"],"#e5cbb5"],["vegetable-soup",["#ec6a22","#f7e9c5","#399a3f","#9ac764","#fff7e0","#ffcd6b","#634754","#98c195","#708658"],"#fff7e0"],["risograph",["#f56f64","#f9cb1f","#f0eace"],"#f0eace"],["tote-bag",["#f5f5f5","#ffc6cf","#fd5105","#4124b0"],"#ffc6cf"],["slicks",["#ffbdd0","#ff4328","#e88526","#21b929","#2193c9","#fffcea","#ffcc21"],"#212121"]];
+
+function newInks(){
+  let n = 0;
+  try { n = parseInt(localStorage.getItem('tendril-garden-inkpress') || '0', 10) || 0; } catch (e) {}
+  n++;
+  try { localStorage.setItem('tendril-garden-inkpress', String(n)); } catch (e) {}
+  const f = forgeInks(INK_PALS, n);
+  params.bg = f.bg;
+  params.colorPalette = f.inks.slice();
+  syncControls();          // swatches + labels follow
+  repaintInk();            // restyle the existing drawing — no regrow
+  paintChrome();
+  if (typeof saveSettings === 'function') saveSettings();
+  const tag = document.getElementById('inkname');
+  if (tag) {
+    tag.textContent = f.name;
+    tag.classList.add('show');
+    clearTimeout(tag._t);
+    tag._t = setTimeout(() => tag.classList.remove('show'), 2600);
+  }
+}
+
+// ── ARMED: structure settings wait for an explicit regrow ────────────
+let armed = false;
+function paintArmed(){
+  armed = true;
+  const d = document.getElementById('armdot');
+  if (d) d.classList.add('on');
+}
+const _initSys = window.initializeSystem;
+window.initializeSystem = function(){
+  _initSys();
+  armed = false;
+  const d = document.getElementById('armdot');
+  if (d) d.classList.remove('on');
+};
+
+function newDrawing(){ randomSeedAndUpdate(); }
 
 // Your settings ARE the defaults: everything except the seed is remembered,
 // so the app opens exactly as you left it. "Reset" wipes the memory.
@@ -3659,7 +3845,8 @@ function keepDrawing(){
                img: th.toDataURL('image/jpeg', 0.8) });
   while (shelf.length > SHELF_MAX) shelf.shift();
   saveShelf(); paintShelf();
-  if (openDrawer !== 'shelf') drawer('shelf');
+  const n = document.getElementById('kept-count');          // a quiet pulse, not a drawer in your face
+  if (n) { n.classList.remove('pulse'); void n.offsetWidth; n.classList.add('pulse'); }
 }
 function restoreKeep(i){
   const e = shelf[i]; if (!e) return;
@@ -3677,8 +3864,8 @@ function dropKeep(i, ev){
 }
 function paintShelf(){
   const row = document.getElementById('shelf-row');
-  document.getElementById('v-shelf').textContent =
-    shelf.length ? shelf.length + ' kept' : 'empty';
+  const kc = document.getElementById('kept-count');
+  if (kc) kc.textContent = shelf.length ? '· ' + shelf.length + ' kept' : '';
   if (!shelf.length){
     row.innerHTML = '<span class="shelfempty eng">Nothing here yet &mdash; press Keep when a drawing deserves to stay.</span>';
     return;

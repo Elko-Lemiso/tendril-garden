@@ -93,7 +93,8 @@ function syntheticMask(api, narrow) {
   const N = 300, m = new Uint8Array(N * N);
   // wide: 100–240px bars (an easy blob). narrow: 32–40px bars — real
   // letterform stroke widths, the case that used to force pure linework.
-  const bars = narrow ? [[60, 70], [140, 148], [200, 210]]
+  const bars = narrow === 'thin' ? [[60, 66], [140, 145], [200, 206]]
+             : narrow ? [[60, 70], [140, 148], [200, 210]]
                       : [[40, 70], [120, 180], [220, 245]];
   for (let y = 30; y < 270; y++) for (const [a, b] of bars)
     for (let x = a; x < b; x++) m[y * N + x] = 1;
@@ -175,6 +176,12 @@ const CONFIGS = [
   { name: 'rhythm-loose', set: { rhythm: 'loose' }, floor: 0.85 },
   { name: 'rhythm-key', set: { rhythm: 'strict', style: 'angular', latticeAngle: 90 }, floor: 0.85 },
   { name: 'vac-rhythm', set: { vacancy: 'on', rhythm: 'loose', style: 'angular', latticeAngle: 60 }, floor: 0.85 },
+  // masks + switches: the review's blind spot, plus the flagged scenario —
+  // thin strokes at high clearance, where a wrong doneness test starves the fill
+  { name: 'mask-vac', set: { vacancy: 'on' }, mask: true, floor: 0.85 },
+  { name: 'mask-narrow-vac', set: { vacancy: 'on' }, mask: 'narrow', floor: 0.55 },
+  { name: 'mask-thin-off', set: { clearance: 22 }, mask: 'thin', floor: 0, slowMs: 15000 },
+  { name: 'mask-thin-vac', set: { vacancy: 'on', clearance: 22 }, mask: 'thin', floor: 0, slowMs: 15000 },
 ];
 const SEEDS = [12345, 4242, 99, 777, 31337];
 
@@ -188,7 +195,7 @@ for (const cfg of CONFIGS) {
     api.params.startEmpty = 'off';
     let maskFn = null;
     if (cfg.mask) {
-      const m = syntheticMask(api, cfg.mask === 'narrow');
+      const m = syntheticMask(api, cfg.mask === true ? false : cfg.mask);
       api.setMask(m);
       maskFn = (x, y) => m[Math.floor(y * 300 / api.H) * 300 + Math.floor(x * 300 / api.W)] === 1;
     }
@@ -212,7 +219,7 @@ for (const cfg of CONFIGS) {
       if (v.length >= 2 && Math.max(...v) / Math.max(1, Math.min(...v)) > 1.6)
         failures.push(key + ': shape imbalance ' + JSON.stringify(m.shapes));
     }
-    if (ms > 8000) failures.push(key + ': slow (' + ms + 'ms)');
+    if (ms > (cfg.slowMs || 8000)) failures.push(key + ': slow (' + ms + 'ms)');
   }
 }
 
