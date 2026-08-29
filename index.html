@@ -311,6 +311,8 @@ input[type=range]::-moz-range-thumb{width:2px;height:12px;background:var(--mid);
           <input type="range" id="zigAngle" min="30" max="80" step="2" value="60" oninput="liveVal(this)" onchange="updateParam('zigAngle',this.value)"></div>
         <div class="row" id="row-lattice"><div class="rowhead"><span class="eng">Grid angle</span><span class="val" id="latticeAngle-value">60</span></div>
           <div class="segstrip" data-k="latticeAngle" data-num="1"><button data-v="30">30&deg;</button><button data-v="36">36&deg;</button><button data-v="45">45&deg;</button><button data-v="60">60&deg;</button><button data-v="90">90&deg;</button></div></div>
+        <div class="row"><span class="eng">Rhythm</span>
+          <div class="segstrip" data-k="rhythm"><button data-v="off">off</button><button data-v="loose">loose</button><button data-v="strict">strict</button></div></div>
       </div>
     </div>
   </div>
@@ -340,6 +342,8 @@ input[type=range]::-moz-range-thumb{width:2px;height:12px;background:var(--mid);
           <input type="range" id="clickLength" min="20" max="600" step="10" value="120" oninput="liveVal(this)" onchange="updateParam('clickLength',this.value)"></div>
         <div class="row"><span class="eng">Render</span>
           <div class="segstrip" data-k="render"><button data-v="animated">animated</button><button data-v="instant">instant</button></div></div>
+        <div class="row"><span class="eng">Sees the page</span>
+          <div class="segstrip" data-k="vacancy"><button data-v="off">off</button><button data-v="on">on</button></div></div>
       </div>
     </div>
   </div>
@@ -473,6 +477,8 @@ input[type=range]::-moz-range-thumb{width:2px;height:12px;background:var(--mid);
             latticeAngle: 60,
             branching: 4,
             coilTendency: 4,
+            vacancy: 'off',
+            rhythm: 'off',
             bg: '#1e1c18',
             colorPalette: ['#743b16', '#c97b4a', '#7fa08a']
         };
@@ -794,6 +800,40 @@ input[type=range]::-moz-range-thumb{width:2px;height:12px;background:var(--mid);
 
         // the angular style's lattice is adjustable — LAT() is its unit angle
         function LAT() { return radians(params.latticeAngle); }
+
+        // ── RHYTHM (switch: params.rhythm — off / loose / strict) ────────
+        // Ornament repeats relationships, not objects: a line can carry a
+        // short motif — run, turn, run, turn — and repeat it with slight
+        // variation. Two same-sign turns in a row double back: at 90° that
+        // is the Greek-key move, at 60° its hexagonal cousin. All rhythm
+        // randomness comes from a private hashed generator seeded by
+        // (drawing seed, line id), so the shared seeded random() stream is
+        // NEVER touched — rhythm adds zero draws whether on or off.
+        function rhythmRand(seedA, seedB) {
+            let st = (Math.imul(seedA | 0, 2654435761) ^ Math.imul((seedB | 0) + 1, 40503)) >>> 0;
+            return function () {
+                st = (st + 0x6D2B79F5) >>> 0;
+                let t = Math.imul(st ^ (st >>> 15), st | 1);
+                t = (t + Math.imul(t ^ (t >>> 7), t | 61)) ^ t;
+                return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+            };
+        }
+
+        function makeRhythm(id) {
+            const r = rhythmRand(params.seed, id);
+            const motifs = [
+                { turns: [1, -1],        runs: [1, 1] },              // wave
+                { turns: [1, 1, -1, -1], runs: [1, 0.55, 1, 0.55] },  // meander
+                { turns: [1, -1],        runs: [1.6, 0.7] },          // stair drift
+                { turns: [-1, -1, 1, 1], runs: [0.8, 0.8, 0.8, 0.8] } // battlement
+            ];
+            const m = motifs[Math.floor(r() * motifs.length)];
+            const base = 2.2 + r() * 2.2;                 // beat length, in clearances
+            const angle = params.style === 'angular' ? LAT() : radians(40 + r() * 35);
+            return { turns: m.turns, runs: m.runs.map(u => u * base),
+                     angle, at: 0, traveled: 0, jitter: 1, rand: r,
+                     strict: params.rhythm === 'strict' };
+        }
         function snapLat(h) { return Math.round(h / LAT()) * LAT(); }
 
         // effective clearance: never let the gap collapse relative to the pen —
@@ -901,6 +941,7 @@ input[type=range]::-moz-range-thumb{width:2px;height:12px;background:var(--mid);
                 this.branches = 0;
                 this.exempt = null;
                 this.runLeft = 0;        // straight-run cooldown after any turn
+                this.rhythm = null;      // lazily built motif memory (rhythm switch)
                 this.lastHit = -999;     // when this line last had to dodge something
                 this.cornerMode = false; // two hits in quick succession = a corner
                 this.backtracks = 0;     // retreat-and-retry budget
@@ -1034,8 +1075,11 @@ input[type=range]::-moz-range-thumb{width:2px;height:12px;background:var(--mid);
                     // the directions that are open, prefer the one heading into
                     // the emptiest ground. Lines stay dead straight between
                     // turns — only the CHOICE of turn is attracted.
-                    const probe = occupancyAt(this.x + Math.cos(h) * c * 6,
-                                              this.y + Math.sin(h) * c * 6);
+                    const px2 = this.x + Math.cos(h) * c * 6;
+                    const py2 = this.y + Math.sin(h) * c * 6;
+                    const probe = params.vacancy === 'on'
+                        ? 1 - Math.min(1, vacAt(px2, py2) / (c * 6))
+                        : occupancyAt(px2, py2);
                     const s = open - Math.abs(off) * c * 0.7 + (1 - probe) * c * 3.5;
                     if (s > bestS) { bestS = s; bestH = h; bestOpen = open; }
                 }
@@ -1658,6 +1702,35 @@ input[type=range]::-moz-range-thumb{width:2px;height:12px;background:var(--mid);
                     this.zigRanges.push({ a: this.idx, b: Infinity });
                 }
 
+                // rhythm: the line keeps its own beat — run, turn, run,
+                // turn — repeating its motif for as long as the ground
+                // allows. A beat only lands with verified room: never-touch
+                // outranks rhythm, and every actual step is still validated
+                // by the ordinary probe below.
+                if (params.rhythm !== 'off' && !this.zig && !this.merge &&
+                    !this.wantCoil && !this.follow && this.runLeft <= 0 &&
+                    this.stepsAlive > 25) {
+                    if (!this.rhythm) this.rhythm = makeRhythm(this.id);
+                    const rh = this.rhythm;
+                    rh.traveled += STEP;
+                    const beat = rh.runs[rh.at % rh.runs.length] * c * rh.jitter;
+                    if (rh.traveled >= beat) {
+                        const sign = rh.turns[rh.at % rh.turns.length] * this.dir;
+                        const baseH = params.style === 'angular' ? snapLat(this.heading) : this.heading;
+                        const h = baseH + sign * rh.angle;
+                        if (this.openness(h, c * 2.5) >= c * 2) {
+                            this.heading = h;
+                            this.runLeft = Math.ceil(c * 0.8 / STEP);
+                            rh.at++; rh.traveled = 0;
+                            // loose rhythm breathes; strict keeps the meter
+                            rh.jitter = rh.strict ? 1 : 0.85 + rh.rand() * 0.3;
+                        } else if (!rh.strict || rh.traveled > beat * 2) {
+                            rh.at++; rh.traveled = 0;   // skip the blocked beat
+                        }
+                        // strict holds course and retries the beat each step
+                    }
+                }
+
                 // a fork: at this point, one line becomes two. The new branch
                 // leaves at exactly 45° or 90°, and sometimes the split is
                 // symmetric — the parent bends one way, the branch the other.
@@ -1890,8 +1963,14 @@ input[type=range]::-moz-range-thumb{width:2px;height:12px;background:var(--mid);
         let drawPts = null;          // freehand stroke in progress
 
         function waveOrGiveUp() {
-            if (spawnBranchWave() === 0) {
-                if (++emptyWaves >= (maskArr ? 10 : 3)) {   // narrow shapes: more misses per hit
+            // with the vacancy map on, "is there room left" is measured, not
+            // guessed: when no pocket can hold this pass's smallest legal
+            // element, skip the wave of darts and move on immediately
+            const lvl2 = growPhase === 'detail2' ? 0.32 : growPhase === 'detail' ? 0.55 : 1;
+            const noRoom = params.vacancy === 'on' &&
+                           !vacHasRoom(clr() * lvl2 * (maskArr ? 0.6 : 1.5));
+            if (noRoom || spawnBranchWave() === 0) {
+                if (noRoom || ++emptyWaves >= (maskArr ? 10 : 3)) {   // narrow shapes: more misses per hit
                     if (growPhase === 'primary' && params.detail !== 'off') {
                         // primaries are settled — a finer generation now fills
                         // the space between them, like engraving inside ornament
@@ -2116,6 +2195,7 @@ input[type=range]::-moz-range-thumb{width:2px;height:12px;background:var(--mid);
             emptyWaves = 0;
             growPhase = 'primary';
             densField = null; densTries = null; maskCells = null;
+            vacField = null; vacStamp = -1;
             // painted keep-clear zones survive regeneration
             for (const z of brushZones) {
                 markSym(z.x, z.y, -997, 0);
@@ -2422,7 +2502,20 @@ input[type=range]::-moz-range-thumb{width:2px;height:12px;background:var(--mid);
                 const x = gx * cw2 + random(cw2), y = gy * ch2 + random(ch2);
                 if (!tiling() && (x < MARGIN || x > W - MARGIN || y < MARGIN || y > H - MARGIN)) continue;
                 if (maskArr && !inMask(x, y)) continue;
-                const occ = densField[gi] / densMax * 100;
+                // with the vacancy map on, "emptiest" means the biggest
+                // free disc, not the lowest point count — same darts, same
+                // dice, better eyes. But bigger stops being better past the
+                // anchor reach: a colonist must find ink within ~22
+                // clearances of its birth, so the middle of a desert is a
+                // wasted dart. Prefer the FRONTIER: big pockets, near ink.
+                let occ;
+                if (params.vacancy === 'on') {
+                    const v = vacAt(x, y), cc = clr();
+                    occ = -Math.min(v, cc * 8) * 0.9
+                        + Math.max(0, v - cc * 14) * 3;
+                } else {
+                    occ = densField[gi] / densMax * 100;
+                }
                 const sc = occ + densTries[gi] * 9 + random(22);
                 if (sc < bestScore) { bestScore = sc; best = { x, y, gi }; }
             }
@@ -2436,6 +2529,76 @@ input[type=range]::-moz-range-thumb{width:2px;height:12px;background:var(--mid);
             const gx = Math.min(DN - 1, Math.max(0, Math.floor(wrapX(x) * DN / W)));
             const gy = Math.min(DN - 1, Math.max(0, Math.floor(wrapY(y) * DN / H)));
             return densField[gy * DN + gx] / densMax;
+        }
+
+        // ── VACANCY MAP (switch: params.vacancy) ─────────────────────────
+        // The drawing's own eye. Every cell holds the distance to the
+        // nearest registered point — ink, reserved void, keep-clear zone,
+        // symmetry ghost: everything that denies room denies it here too.
+        // That distance IS the radius of the biggest empty disc centered on
+        // the cell: the thing a human reads off a half-finished drawing at
+        // a glance. Same two-pass chamfer the masks use; construction draws
+        // NO random(), and with the switch off no code path changes at all.
+        // (Under seamless tiling the field does not see across the seam —
+        // it slightly overestimates room there, which only biases darts.)
+        const VACN = MASKN;
+        let vacField = null, vacStamp = -1;
+
+        function buildVacancy() {
+            const N = VACN, BIG = 1e6;
+            const d = new Float32Array(N * N);
+            const inner = Math.ceil(MARGIN / (W / N));
+            for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
+                const i = y * N + x;
+                const edge = !tiling() && (x < inner || x >= N - inner || y < inner || y >= N - inner);
+                d[i] = (edge || (maskArr && !inMask((x + 0.5) * W / N, (y + 0.5) * H / N))) ? 0 : BIG;
+            }
+            grid.forEach(arr => {
+                for (let i = 0; i < arr.length; i++) {
+                    const gx = Math.min(N - 1, Math.max(0, Math.floor(arr[i].x * N / W)));
+                    const gy = Math.min(N - 1, Math.max(0, Math.floor(arr[i].y * N / H)));
+                    d[gy * N + gx] = 0;
+                }
+            });
+            for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
+                const i = y * N + x;
+                if (!d[i]) continue;
+                let v = d[i];
+                if (x > 0) v = Math.min(v, d[i - 1] + 1);
+                if (y > 0) v = Math.min(v, d[i - N] + 1);
+                if (x > 0 && y > 0) v = Math.min(v, d[i - N - 1] + 1.414);
+                if (x < N - 1 && y > 0) v = Math.min(v, d[i - N + 1] + 1.414);
+                d[i] = v;
+            }
+            for (let y = N - 1; y >= 0; y--) for (let x = N - 1; x >= 0; x--) {
+                const i = y * N + x;
+                if (!d[i]) continue;
+                let v = d[i];
+                if (x < N - 1) v = Math.min(v, d[i + 1] + 1);
+                if (y < N - 1) v = Math.min(v, d[i + N] + 1);
+                if (x < N - 1 && y < N - 1) v = Math.min(v, d[i + N + 1] + 1.414);
+                if (x > 0 && y < N - 1) v = Math.min(v, d[i + N - 1] + 1.414);
+                d[i] = v;
+            }
+            vacField = d; vacStamp = frameCount2;
+        }
+
+        // free radius in px of the biggest empty disc centered near (x, y)
+        function vacAt(x, y) {
+            if (!vacField || frameCount2 - vacStamp > 60) buildVacancy();
+            const gx = Math.min(VACN - 1, Math.max(0, Math.floor(wrapX(x) * VACN / W)));
+            const gy = Math.min(VACN - 1, Math.max(0, Math.floor(wrapY(y) * VACN / H)));
+            return vacField[gy * VACN + gx] * (W / VACN);
+        }
+
+        // Is any pocket left that could hold the smallest legal element of
+        // the current pass? An exact answer to "is the drawing done" — the
+        // measured replacement for counting failed dart waves.
+        function vacHasRoom(need) {
+            buildVacancy();               // wave boundary: measure fresh
+            const lim = need / (W / VACN);
+            for (let i = 0; i < vacField.length; i++) if (vacField[i] >= lim) return true;
+            return false;
         }
 
         function spawnBranchWave() {
@@ -2531,6 +2694,18 @@ input[type=range]::-moz-range-thumb{width:2px;height:12px;background:var(--mid);
                 tendrils.push(kid);
                 if (densField) densField[tgt.gi] += densMax * 0.35;
                 if (densTries) densTries[tgt.gi] = 0;   // fertile ground: reset its patience
+                // and the vacancy map gets the same courtesy: mark the
+                // claimed pocket as taken so this wave's remaining darts
+                // hunt elsewhere (the field is rebuilt fresh next wave)
+                if (vacField && params.vacancy === 'on') {
+                    const rr = Math.ceil(cHere * 1.6 / (W / VACN));
+                    const cgx = Math.floor(tgt.x * VACN / W), cgy = Math.floor(tgt.y * VACN / H);
+                    for (let dy = -rr; dy <= rr; dy++) for (let dx = -rr; dx <= rr; dx++) {
+                        const gx2 = cgx + dx, gy2 = cgy + dy;
+                        if (gx2 >= 0 && gx2 < VACN && gy2 >= 0 && gy2 < VACN)
+                            vacField[gy2 * VACN + gx2] = Math.min(vacField[gy2 * VACN + gx2], 1);
+                    }
+                }
                 spawned++;
             }
             return spawned;
@@ -3374,8 +3549,10 @@ function paintChrome(){
   const shapeWords = { circles:'spirals', triangles:'triangles', squares:'squares', lines:'lines' };
   t('v-form').textContent  = params.style + ' · ' +
     params.shapes.map(x => shapeWords[x] || x).join('+') + ' · ' + params.origin +
-                             (params.symmetry !== 'off' ? ' · ' + params.symmetry : '');
-  t('v-growth').textContent = params.tendrilCount + ' · ' + params.lineWidth + 'pt · ' + params.render;
+                             (params.symmetry !== 'off' ? ' · ' + params.symmetry : '') +
+                             (params.rhythm !== 'off' ? ' · rhythm' : '');
+  t('v-growth').textContent = params.tendrilCount + ' · ' + params.lineWidth + 'pt · ' + params.render +
+                              (params.vacancy === 'on' ? ' · sees page' : '');
   t('v-sheet').textContent = params.paper + ' · ' + ({on:'joined', single:'one line'}[params.stitch] || 'free') +
                              (params.tile === 'on' ? ' · tiling' : '');
   const inks = [params.bg].concat(params.colorPalette);

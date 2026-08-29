@@ -169,6 +169,12 @@ const CONFIGS = [
   { name: 'tree', set: { origin: 'tree', branching: 9 }, floor: 0.35 },
   { name: 'mask-bars', set: {}, mask: true, floor: 0.85 },
   { name: 'mask-narrow', set: {}, mask: 'narrow', floor: 0.55 },
+  // the switchable grammar: each new mechanism gets its own runs so its
+  // contribution (and its regressions) are visible in isolation
+  { name: 'vacancy', set: { vacancy: 'on' }, floor: 0.90 },
+  { name: 'rhythm-loose', set: { rhythm: 'loose' }, floor: 0.85 },
+  { name: 'rhythm-key', set: { rhythm: 'strict', style: 'angular', latticeAngle: 90 }, floor: 0.85 },
+  { name: 'vac-rhythm', set: { vacancy: 'on', rhythm: 'loose', style: 'angular', latticeAngle: 60 }, floor: 0.85 },
 ];
 const SEEDS = [12345, 4242, 99, 777, 31337];
 
@@ -208,6 +214,13 @@ for (const cfg of CONFIGS) {
     }
     if (ms > 8000) failures.push(key + ': slow (' + ms + 'ms)');
   }
+}
+
+if (MODE === 'show') {
+  // full metrics for every key matching the given substring
+  const pat = process.argv[3] || '';
+  for (const k in results) if (k.includes(pat)) console.log(k, JSON.stringify(results[k]));
+  process.exit(0);
 }
 
 if (MODE === 'bless') {
