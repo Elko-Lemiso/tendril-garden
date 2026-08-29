@@ -88,5 +88,10 @@
  "mask-thin-vac:4242": "e7ebacc2",
  "mask-thin-vac:99": "5b0bd714",
  "mask-thin-vac:777": "f519a7c",
- "mask-thin-vac:31337": "4962fdfe"
+ "mask-thin-vac:31337": "4962fdfe",
+ "vac-tile:12345": "b8cf3f92",
+ "vac-tile:4242": "a8970d9b",
+ "vac-tile:99": "fe14fb84",
+ "vac-tile:777": "1e1ee434",
+ "vac-tile:31337": "661eeb9f"
 }

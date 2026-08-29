@@ -129,15 +129,27 @@ function measure(api, wantMask) {
   const shapes = {};
   for (const t of vis) if (t.coilKind) shapes[t.coilKind] = (shapes[t.coilKind] || 0) + 1;
   // coverage
-  const c = api.params.clearance, cs = wantMask ? c * 2 : c * 4;
+  const c = api.params.clearance;
   let covered = 0, total = 0;
-  for (let gx = 40; gx < api.W - 40; gx += cs) for (let gy = 40; gy < api.H - 40; gy += cs) {
-    if (wantMask && !wantMask(gx + cs / 2, gy + cs / 2)) continue;
-    total++;
-    let hit = false;
-    for (let dx = 0; dx < cs && !hit; dx += c) for (let dy = 0; dy < cs && !hit; dy += c)
-      if (api.isBlocked(gx + dx, gy + dy, -1, 0, Infinity)) hit = true;
-    if (hit) covered++;
+  if (wantMask) {
+    // thin strokes demand a sampler finer than the strokes themselves
+    // (clearance-sized cells step right over 20px bars): walk an 8px
+    // lattice of in-mask points; a point is covered when any ink sits
+    // within one clearance of it
+    for (let gx = 20; gx < api.W - 20; gx += 8) for (let gy = 20; gy < api.H - 20; gy += 8) {
+      if (!wantMask(gx, gy)) continue;
+      total++;
+      if (api.isBlocked(gx, gy, -1, 0, Infinity)) covered++;
+    }
+  } else {
+    const cs = c * 4;
+    for (let gx = 40; gx < api.W - 40; gx += cs) for (let gy = 40; gy < api.H - 40; gy += cs) {
+      total++;
+      let hit = false;
+      for (let dx = 0; dx < cs && !hit; dx += c) for (let dy = 0; dy < cs && !hit; dy += c)
+        if (api.isBlocked(gx + dx, gy + dy, -1, 0, Infinity)) hit = true;
+      if (hit) covered++;
+    }
   }
   // geometry hash
   let acc = '';
@@ -168,8 +180,8 @@ const CONFIGS = [
   { name: 'spirals-only', set: { shapes: ['circles'], endings: 'circles' }, floor: 0.88 },
   { name: 'lines-only', set: { shapes: ['lines'], endings: 'lines' }, floor: 0.92 },
   { name: 'tree', set: { origin: 'tree', branching: 9 }, floor: 0.35 },
-  { name: 'mask-bars', set: {}, mask: true, floor: 0.85 },
-  { name: 'mask-narrow', set: {}, mask: 'narrow', floor: 0.55 },
+  { name: 'mask-bars', set: {}, mask: true, floor: 0.80 },
+  { name: 'mask-narrow', set: {}, mask: 'narrow', floor: 0.85 },
   // the switchable grammar: each new mechanism gets its own runs so its
   // contribution (and its regressions) are visible in isolation
   { name: 'vacancy', set: { vacancy: 'on' }, floor: 0.90 },
@@ -178,10 +190,11 @@ const CONFIGS = [
   { name: 'vac-rhythm', set: { vacancy: 'on', rhythm: 'loose', style: 'angular', latticeAngle: 60 }, floor: 0.85 },
   // masks + switches: the review's blind spot, plus the flagged scenario —
   // thin strokes at high clearance, where a wrong doneness test starves the fill
-  { name: 'mask-vac', set: { vacancy: 'on' }, mask: true, floor: 0.85 },
-  { name: 'mask-narrow-vac', set: { vacancy: 'on' }, mask: 'narrow', floor: 0.55 },
-  { name: 'mask-thin-off', set: { clearance: 22 }, mask: 'thin', floor: 0, slowMs: 15000 },
-  { name: 'mask-thin-vac', set: { vacancy: 'on', clearance: 22 }, mask: 'thin', floor: 0, slowMs: 15000 },
+  { name: 'mask-vac', set: { vacancy: 'on' }, mask: true, floor: 0.80 },
+  { name: 'mask-narrow-vac', set: { vacancy: 'on' }, mask: 'narrow', floor: 0.85 },
+  { name: 'mask-thin-off', set: { clearance: 22 }, mask: 'thin', floor: 0.10, minLines: 2, slowMs: 15000 },
+  { name: 'mask-thin-vac', set: { vacancy: 'on', clearance: 22 }, mask: 'thin', floor: 0.10, minLines: 2, slowMs: 15000 },
+  { name: 'vac-tile', set: { vacancy: 'on', tile: 'on' }, floor: 0.95 },
 ];
 const SEEDS = [12345, 4242, 99, 777, 31337];
 
@@ -213,6 +226,7 @@ for (const cfg of CONFIGS) {
     if (m.deadEnds > 0) failures.push(key + ': ' + m.deadEnds + ' dead ends');
     if (m.fragments > 0) failures.push(key + ': ' + m.fragments + ' fragments');
     if (m.coverage < cfg.floor) failures.push(key + ': coverage ' + m.coverage + ' < ' + cfg.floor);
+    if (cfg.minLines && m.lines < cfg.minLines) failures.push(key + ': only ' + m.lines + ' lines, need ' + cfg.minLines);
     if (cfg.name === 'default' && m.inkSpread > 12) failures.push(key + ': ink spread ' + m.inkSpread);
     if (cfg.name === 'default') {
       const v = Object.values(m.shapes);
