@@ -505,7 +505,7 @@ input[type=range]::-moz-range-thumb{width:2px;height:12px;background:var(--mid);
         // forever with no seam. Coordinates wrap, and so does the collision
         // grid, so a line leaving the right edge really does meet what is
         // growing on the left. ──
-        function tiling() { return params.tile === 'on' && !maskArr; }
+        function tiling() { return tileLaw() === 'on' && !maskArr; }
         function wrapX(x) { return tiling() ? ((x % W) + W) % W : x; }
         function wrapY(y) { return tiling() ? ((y % H) + H) % H : y; }
         // shortest signed distance on the torus
@@ -766,13 +766,13 @@ input[type=range]::-moz-range-thumb{width:2px;height:12px;background:var(--mid);
         // Every stroke exists n times, reflected or rotated. The replicas are
         // real occupants of the grid, so mirror images never touch each other.
         function symCount() {
-            return params.symmetry === 'rot2' ? 2 : params.symmetry === 'rot4' ? 4
-                 : params.symmetry === 'rot6' ? 6 : 1;
+            const sym = symLaw();
+            return sym === 'rot2' ? 2 : sym === 'rot4' ? 4 : sym === 'rot6' ? 6 : 1;
         }
 
         // point-transform functions for the replicas (identity excluded)
         function symXforms() {
-            if (params.symmetry === 'mirror') return [p => ({ x: W - p.x, y: p.y })];
+            if (symLaw() === 'mirror') return [p => ({ x: W - p.x, y: p.y })];
             const n = symCount(), out = [];
             for (let k = 1; k < n; k++) {
                 const a = TWO_PI * k / n, ca = Math.cos(a), sa = Math.sin(a);
@@ -2177,10 +2177,13 @@ input[type=range]::-moz-range-thumb{width:2px;height:12px;background:var(--mid);
         // Build a drawing from nothing: seeds, then waves of branches that
         // colonise whatever space is left, until no pocket can hold a line.
         function initializeSystem() {
+            applyPending();          // staged mid-growth edits land before a fresh grow
             randomSeed(params.seed);
-            // what the drawing is grown WITH — repaint must respect these even
-            // if the user re-arms the settings afterwards (two-lane contract)
-            grown = { symmetry: params.symmetry, tile: params.tile, lineWidth: params.lineWidth };
+            // the law the drawing is grown UNDER — every later repaint, export,
+            // and grid edit answers to these, however the settings are re-armed
+            grown = { symmetry: params.symmetry, tile: params.tile,
+                      style: params.style, lineWidth: params.lineWidth };
+            grownParams = JSON.parse(JSON.stringify(params));
             noiseSeed(params.seed);
 
             cellSize = clr();
@@ -2278,7 +2281,7 @@ input[type=range]::-moz-range-thumb{width:2px;height:12px;background:var(--mid);
         // the corridor the original claimed — it can never touch anything the
         // original did not.
         function flowPath(pts) {
-            if (params.style !== 'flowing' || !pts || pts.length < 6) return pts;
+            if (styleLaw() !== 'flowing' || !pts || pts.length < 6) return pts;
             const keep = [pts[0]];
             let ph = Math.atan2(pts[1].y - pts[0].y, pts[1].x - pts[0].x);
             for (let i = 1; i < pts.length - 1; i++) {
@@ -2325,7 +2328,39 @@ input[type=range]::-moz-range-thumb{width:2px;height:12px;background:var(--mid);
             return t.colIdx;
         }
 
-        let grown = null;       // settings the current geometry was grown with
+        let grown = null;        // structural law the current geometry was grown under
+        let grownParams = null;  // the FULL recipe that grew it (for Keep/Link)
+        let pendingWrites = null;// structure edits made while a drawing is still growing
+
+        // The geometry's law: while ink exists, symmetry/tiling/style questions
+        // are answered by what the drawing was GROWN with — armed settings must
+        // never re-transform, re-wrap, or re-smooth geometry that was
+        // collision-checked under the old law.
+        function symLaw()  { return grown ? grown.symmetry : params.symmetry; }
+        function tileLaw() { return grown ? grown.tile     : params.tile; }
+        function styleLaw(){ return grown ? grown.style    : params.style; }
+
+        // While a drawing is growing, structure edits are STAGED, not applied —
+        // the engine reads params live, so a mid-growth write would corrupt the
+        // very drawing the armed dot promises to leave alone.
+        function stageWrite(k, v) {
+            if (typeof isLooping === 'function' && isLooping()) {
+                (pendingWrites = pendingWrites || {})[k] = v;
+                armSetting();
+                return true;
+            }
+            return false;
+        }
+        function applyPending() {
+            if (!pendingWrites) return;
+            const p = pendingWrites; pendingWrites = null;
+            const preset = p._preset; delete p._preset;
+            if (preset !== undefined) applyPreset(preset);
+            for (const k in p) params[k] = p[k];
+            if (typeof syncControls === 'function') syncControls();
+            if (typeof paintChrome === 'function') paintChrome();
+            if (typeof saveSettings === 'function') saveSettings();
+        }
         // The pen the RENDER uses. Live thickness edits repaint the existing
         // geometry, but never past 2.2x the grown width — beyond that, lines
         // that never touched would LOOK like they touch. Regrow lifts the cap.
@@ -2754,8 +2789,9 @@ input[type=range]::-moz-range-thumb{width:2px;height:12px;background:var(--mid);
                 if (params.doodles !== 'off' && params.startEmpty !== 'on') stampDoodles();
                 doodlesDone = true;
             }
+            noLoop();        // settled first, so applyPending lands as 'armed', not 'live'
+            applyPending();
             renderFinal();
-            noLoop();
         }
 
         // ink only what changed since the last frame (plus symmetric ghosts)
@@ -2829,6 +2865,7 @@ input[type=range]::-moz-range-thumb{width:2px;height:12px;background:var(--mid);
         // never-touch contract as a grown one.
         function commitDrawnStroke(pts) {
             if (!pts || pts.length < 3) return false;
+            if (grown) grown.lineWidth = Math.min(grown.lineWidth, params.lineWidth);
             const t = new Tendril(tendrils.length, 0);
             t.state = 'growing';
             t.drawn = true;
@@ -2905,6 +2942,7 @@ input[type=range]::-moz-range-thumb{width:2px;height:12px;background:var(--mid);
         }
 
         function plantAt(x, y) {
+            if (grown) grown.lineWidth = Math.min(grown.lineWidth, params.lineWidth);
             const c = clr();
             // open-enough ground: plant a fresh root at (or just beside) the click
             for (let ring = 0; ring <= 3; ring++) {
@@ -2973,43 +3011,50 @@ input[type=range]::-moz-range-thumb{width:2px;height:12px;background:var(--mid);
         // chrome hook — a no-op stub here so the engine runs headless.
         function armSetting() { if (typeof paintArmed === 'function') paintArmed(); }
 
-        // repaint the finished geometry with current paint — but with the
-        // symmetry/tiling it was GROWN with, since those are baked into it
+        // repaint what is on the sheet in the current paint. Settled: the full
+        // final render (which reads the grown law via symLaw/tileLaw/styleLaw).
+        // Mid-growth: wipe the sheet and rewind the ink watermarks — the next
+        // liveInk frames relay every visible segment in the new colors.
         function repaintInk() {
-            if (typeof isLooping === 'function' && isLooping()) return; // live frames repaint anyway
-            if (!grown) { renderFinal(); return; }
-            const s = params.symmetry, t = params.tile;
-            params.symmetry = grown.symmetry; params.tile = grown.tile;
+            if (typeof isLooping === 'function' && isLooping()) {
+                background(params.bg);
+                for (const t of tendrils) {
+                    if (t.drawnT) t.drawnT = 1;
+                    if (t.drawnC) t.drawnC = 0;
+                }
+                return;
+            }
             renderFinal();
-            params.symmetry = s; params.tile = t;
         }
 
         function updateParam(name, value) {
             const v = parseFloat(value);
-            params[name] = v;
             document.getElementById(name + '-value').textContent = value;
+            if (name === 'growthSpeed' || name === 'clickLength') { params[name] = v; return; }  // free lane
+            if (stageWrite(name, v)) return;   // mid-growth: staged, params untouched
+            params[name] = v;
             if (name === 'lineWidth') {
                 repaintInk(); armSetting();                // paint lane (armed too: regrow lifts the cap)
                 const hint = document.getElementById('lw-hint');
                 if (hint) hint.classList.toggle('on', grown && v > grown.lineWidth * 2.2);
                 return;
             }
-            if (name === 'growthSpeed' || name === 'clickLength') return;      // free lane
             armSetting();                                                      // structure lane
         }
 
-        function updateOrigin(value) { params.origin = value; armSetting(); }
+        function updateOrigin(value) { if (stageWrite('origin', value)) return; params.origin = value; armSetting(); }
 
-        function updateStyle(value) { params.style = value; armSetting(); }
+        function updateStyle(value) { if (stageWrite('style', value)) return; params.style = value; armSetting(); }
 
-        function updateEndings(value) { params.endings = value; armSetting(); }
+        function updateEndings(value) { if (stageWrite('endings', value)) return; params.endings = value; armSetting(); }
 
         function updateSelect(name, value) {
-            params[name] = value;
             // paper size, stroke joining and stamp shape affect export or the
             // next click only — never the drawing that is already on the sheet
-            if (name === 'paper' || name === 'stitch' || name === 'stampKind') return;
-            if (name === 'colorMode') { repaintInk(); return; }                // paint lane
+            if (name === 'paper' || name === 'stitch' || name === 'stampKind') { params[name] = value; return; }
+            if (name === 'colorMode') { params[name] = value; repaintInk(); return; }  // paint lane, live-safe
+            if (stageWrite(name, value)) return;
+            params[name] = value;
             armSetting();                                                      // structure lane
         }
 
@@ -3035,8 +3080,19 @@ input[type=range]::-moz-range-thumb{width:2px;height:12px;background:var(--mid);
             initializeSystem();
         }
 
+        // the drawing on the sheet = the recipe that grew it + the paint it
+        // wears now. Armed structure settings are NOT part of what you see.
+        function currentRecipe() {
+            const r = JSON.parse(JSON.stringify(grownParams || params));
+            r.bg = params.bg;
+            r.colorPalette = params.colorPalette.slice();
+            r.colorMode = params.colorMode;
+            r.lineWidth = typeof effLW === 'function' ? effLW() : params.lineWidth;
+            return r;
+        }
+
         function copyShareLink() {
-            const hash = btoa(JSON.stringify(params));
+            const hash = btoa(JSON.stringify(currentRecipe()));
             const url = location.href.split('#')[0] + '#' + hash;
             try { history.replaceState(null, '', '#' + hash); } catch (e) {}
             if (navigator.clipboard) navigator.clipboard.writeText(url);
@@ -3440,6 +3496,7 @@ input[type=range]::-moz-range-thumb{width:2px;height:12px;background:var(--mid);
 
         let presetKeys = [];    // keys the currently applied preset wrote
         function applyPreset(name) {
+            if (stageWrite('_preset', name)) return;   // mid-growth: whole preset waits
             const patch = PRESETS[name] || {};
             // revert only what the OUTGOING preset had set — user tweaks survive
             for (const k of presetKeys) if (!(k in patch))
@@ -3450,6 +3507,7 @@ input[type=range]::-moz-range-thumb{width:2px;height:12px;background:var(--mid);
                 ? ['circles', 'triangles', 'squares'] : [params.endings];
             syncControls();
             armSetting();
+            repaintInk();   // the preset's PAINT half (bg/inks/mode) applies now
         }
 
         window.addEventListener('load', function() {
@@ -3502,9 +3560,11 @@ const svg = d => '<svg viewBox="0 0 16 16">' + d + '</svg>';
 
 // route a strip click to whichever engine setter owns that key
 function setKey(k, v, numeric){
-  if (numeric) { params[k] = parseFloat(v); const o = document.getElementById(k + '-value');
-                 if (o) o.textContent = v; armSetting();
-                 if (typeof saveSettings === 'function') saveSettings(); return; }
+  if (numeric) { const nv = parseFloat(v); const o = document.getElementById(k + '-value');
+                 if (o) o.textContent = v;
+                 if (!stageWrite(k, nv)) { params[k] = nv; armSetting();
+                   if (typeof saveSettings === 'function') saveSettings(); }
+                 return; }
   if (k === 'preset') return applyPreset(v);
   if (k === 'style')  return updateStyle(v);
   if (k === 'origin') return updateOrigin(v);
@@ -3522,14 +3582,16 @@ document.querySelectorAll('.segstrip, .grid8').forEach(strip => {
 // selects only the clicked shape; shift-click adds/removes it from the mix.
 // One must always remain. Structure lane: arms, never regrows.
 function toggleShape(v, additive){
-  let set = params.shapes.slice();
+  let set = (pendingWrites && pendingWrites.shapes ? pendingWrites.shapes : params.shapes).slice();
   if (additive){
     const at = set.indexOf(v);
     if (at >= 0) { if (set.length > 1) set.splice(at, 1); }
     else set.push(v);
   } else set = [v];
+  const endings = (set.length === 1) ? set[0] : 'mixed';
+  if (stageWrite('shapes', set)) { stageWrite('endings', endings); return; }
   params.shapes = set;
-  params.endings = (set.length === 1) ? set[0] : 'mixed';
+  params.endings = endings;
   armSetting();
   paintChrome();
 }
@@ -3747,10 +3809,12 @@ function forgeInks(PALS, n) {
 
 const INK_PALS = [["frozen-rose",["#29368f","#e9697b","#1b164d","#f7d996"],"#f2e8e4"],["winter-night",["#122438","#dd672e","#87c7ca","#ebebeb"],"#ebebeb"],["saami",["#eab700","#e64818","#2c6393","#eecfca"],"#e7e6e4"],["knotberry1",["#20342a","#f74713","#686d2c","#e9b4a6"],"#e5ded8"],["knotberry2",["#1d3b1a","#eb4b11","#e5bc00","#f29881"],"#eae2d0"],["tricolor",["#ec643b","#56b7ab","#f8cb57","#1f1e43"],"#f7f2df"],["foxshelter",["#ff3931","#007861","#311f27","#bab9a4"],"#dddddd"],["hermes",["#253852","#51222f","#b53435","#ecbb51"],"#eeccc2"],["olympia",["#ff3250","#ffb33a","#008c36","#0085c6","#4c4c4c"],"#faf2e5"],["byrnes",["#c54514","#dca215","#23507f"],"#e8e7d4"],["butterfly",["#f40104","#f6c0b3","#99673a","#f0f1f4"],"#191e36"],["floratopia",["#bf4a2b","#cd902a","#4e4973","#f5d4bc"],"#1e1a43"],["verena",["#f1594a","#f5b50e","#14a160","#2969de","#885fa4"],"#e2e6e8"],["florida_citrus",["#ea7251","#ebf7f0","#02aca5"],"#9ae2d3"],["lemon_citrus",["#e2d574","#f1f4f7","#69c5ab"],"#f79eac"],["yuma_punk",["#f05e3b","#ebdec4","#ffdb00"],"#161616"],["yuma_punk2",["#f2d002","#f7f5e1","#ec643b"],"#f7f5e1"],["moir",["#a49f4f","#d4501e","#f7c558","#ebbaa6"],"#f7f4ef"],["sprague",["#ec2f28","#f8cd28","#1e95bb","#fbaab3","#fcefdf"],"#fcefdf"],["bloomberg",["#ff5500","#f4c145","#144714","#2f04fc","#e276af"],"#fff3dd"],["revolucion",["#ed555d","#fffcc9","#41b797","#eda126","#7b5770"],"#2d1922"],["sneaker",["#e8165b","#401e38","#66c3b4","#ee7724","#584098"],"#ffffff"],["miradors",["#ff6936","#fddc3f","#0075ca","#00bb70"],"#020202"],["kaffeprat",["#BCAA8C","#D8CDBE","#484A42","#746B58","#9A8C73"],"#fff"],["jrmy",["#df456c","#ea6a82","#270b32","#471e43"],"#ef9198"],["animo",["#f6c103","#f6f6f6","#d1cdc7","#e7e6e5"],"#f5f5f5"],["book",["#be1c24","#d1a082","#037b68","#d8b1a5","#1c2738","#c95a3f"],"#f5b28a"],["juxtapoz",["#20357e","#f44242","#ffffff"],"#cfc398"],["hurdles",["#e16503","#dc9a0f","#dfe2b4","#66a7a6"],"#3c1c03"],["ludo",["#df302f","#e5a320","#0466b3","#0f7963"],"#dedccd"],["riff",["#e24724","#c7c7c7","#1f3e7c","#d29294","#010203"],"#f2f2f2"],["san ramon",["#4f423a","#f6a74b","#589286","#f8e9e2","#2c2825"],"#fff"],["one-dress",["#1767D2","#FFFFFF","#F9AB00","#212121"],"#fff"],["rag-mysore",["#ec6c26","#613a53","#e8ac52","#639aa0"],"#d5cda1"],["rag-gol",["#d3693e","#803528","#f1b156","#90a798"],"#f0e0a4"],["rag-belur",["#f46e26","#68485f","#3d273a","#535d55"],"#dcd4a6"],["rag-bangalore",["#ea720e","#ca5130","#e9c25a","#52534f"],"#f9ecd3"],["rag-taj",["#ce565e","#8e1752","#f8a100","#3ac1a6"],"#efdea2"],["rag-virupaksha",["#f5736a","#925951","#feba4c","#9d9b9d"],"#eedfa2"],["retro",["#69766f","#9ed6cb","#f7e5cc","#9d8f7f","#936454","#bf5c32","#efad57"],null],["retro-washedout",["#878a87","#cbdbc8","#e8e0d4","#b29e91","#9f736c","#b76254","#dfa372"],null],["roygbiv-warm",["#705f84","#687d99","#6c843e","#fc9a1a","#dc383a","#aa3a33","#9c4257"],null],["roygbiv-toned",["#817c77","#396c68","#89e3b7","#f59647","#d63644","#893f49","#4d3240"],null],["present-correct",["#fd3741","#fe4f11","#ff6800","#ffa61a","#ffc219","#ffd114","#fcd82e","#f4d730","#ced562","#8ac38f","#79b7a0","#72b5b1","#5b9bae","#6ba1b7","#49619d","#604791","#721e7f","#9b2b77","#ab2562","#ca2847"],null],["tundra1",["#40708c","#8e998c","#5d3f37","#ed6954","#f2e9e2"],null],["tundra2",["#5f9e93","#3d3638","#733632","#b66239","#b0a1a4","#e3dad2"],null],["tundra3",["#87c3ca","#7b7377","#b2475d","#7d3e3e","#eb7f64","#d9c67a","#f3f2f2"],null],["tundra4",["#d53939","#b6754d","#a88d5f","#524643","#3c5a53","#7d8c7c","#dad6cd"],null],["cc239",["#e3dd34","#78496b","#f0527f","#a7e0e2"],"#e0eff0"],["cc234",["#ffce49","#ede8dc","#ff5736","#ff99b4"],"#f7f4ed"],["cc232",["#5c5f46","#ff7044","#ffce39","#66aeaa"],"#e9ecde"],["cc238",["#553c60","#ffb0a0","#ff6749","#fbe090"],"#f5e9de"],["cc242",["#bbd444","#fcd744","#fa7b53","#423c6f"],"#faf4e4"],["cc245",["#0d4a4e","#ff947b","#ead3a2","#5284ab"],"#f6f4ed"],["cc273",["#363d4a","#7b8a56","#ff9369","#f4c172"],"#f0efe2"],["rohlfs_1R",["#004996","#567bae","#ff4c48","#ffbcb3"],"#fff8e7"],["rohlfs_1Y",["#004996","#567bae","#ffc000","#ffdca4"],"#fff8e7"],["rohlfs_1G",["#004996","#567bae","#60bf3c","#d2deb1"],"#fff8e7"],["rohlfs_2",["#4d3d9a","#f76975","#ffffff","#eff0dd"],"#58bdbc"],["rohlfs_3",["#abdfdf","#fde500","#58bdbc","#eff0dd"],"#f76975"],["rohlfs_4",["#fde500","#2f2043","#f76975","#eff0dd"],"#fbbeca"],["ducci_jb",["#395e54","#e77b4d","#050006","#e55486"],"#efe0bc"],["ducci_a",["#809498","#d3990e","#000000","#ecddc5"],"#863f52"],["ducci_b",["#ecddc5","#79b27b","#000000","#ac6548"],"#d5c08e"],["ducci_d",["#f3cb4d","#f2f5e3","#20191b","#67875c"],"#433d5f"],["ducci_e",["#c37c2b","#f6ecce","#000000","#386a7a"],"#e3cd98"],["ducci_f",["#596f7e","#eae6c7","#463c21","#f4cb4c"],"#e67300"],["ducci_g",["#c75669","#000000","#11706a"],"#ecddc5"],["ducci_h",["#6b5c6e","#4a2839","#d9574a"],"#ffc34b"],["ducci_i",["#e9dcad","#143331","#ffc000"],"#a74c02"],["ducci_j",["#c47c2b","#5f5726","#000000","#7e8a84"],"#ecddc5"],["ducci_o",["#c15e1f","#e4a13a","#000000","#4d545a"],"#dfc79b"],["ducci_q",["#4bae8c","#d0c1a0","#2d3538"],"#d06440"],["ducci_u",["#f6d700","#f2d692","#000000","#5d3552"],"#ff7426"],["ducci_v",["#c65f75","#d3990e","#000000","#597e7a"],"#f6eccb"],["ducci_x",["#dd614a","#f5cedb","#1a1e4f"],"#fbb900"],["jud_playground",["#f04924","#fcce09","#408ac9"],"#ffffff"],["jud_horizon",["#f8c3df","#f2e420","#28b3d0","#648731","#ef6a7d"],"#f2f0e1"],["jud_mural",["#ca3122","#e5af16","#4a93a2","#0e7e39","#e2b9bd"],"#e3ded8"],["jud_cabinet",["#f0afb7","#f6bc12","#1477bb","#41bb9b"],"#e3ded8"],["iiso_zeitung",["#ee8067","#f3df76","#00a9c0","#f7ab76"],"#f5efcb"],["iiso_curcuit",["#f0865c","#f2b07b","#6bc4d2","#1a3643"],"#f0f0e8"],["iiso_airlines",["#fe765a","#ffb468","#4b588f","#faf1e0"],"#fae5c8"],["iiso_daily",["#e76c4a","#f0d967","#7f8cb6","#1daeb1","#ef9640"],"#e2ded2"],["kov_01",["#d24c23","#7ba6bc","#f0c667","#ede2b3","#672b35","#142a36"],"#108266"],["kov_02",["#e8dccc","#e94641","#eeaeae"],"#6c96be"],["kov_03",["#e3937b","#d93f1d","#090d15","#e6cca7"],"#558947"],["kov_04",["#d03718","#292b36","#33762f","#ead7c9","#ce7028","#689d8d"],"#deb330"],["kov_05",["#de3f1a","#de9232","#007158","#e6cdaf","#869679"],"#7aa5a6"],["kov_06",["#a87c2a","#bdc9b1","#f14616","#ecbfaf","#017724","#0e2733","#2b9ae9"],"#dfd4c1"],["kov_06b",["#d57846","#dfe0cc","#de442f","#e7d3c5","#5ec227","#302f35","#63bdb3"],"#dfd4c1"],["kov_07",["#c91619","#fdecd2","#f4a000","#4c2653"],"#89c2cd"],["tsu_arcade",["#4aad8b","#e15147","#f3b551","#cec8b8","#d1af84","#544e47"],"#cfc7b9"],["tsu_harutan",["#75974a","#c83e3c","#f39140","#e4ded2","#f8c5a4","#434f55"],"#cfc7b9"],["tsu_akasaka",["#687f72","#cc7d6c","#dec36f","#dec7af","#ad8470","#424637"],"#cfc7b9"],["dt13",["#f5f2d3","#f5f2d3","#fbd6b8"],"#ec5525"],["hilda01",["#ec5526","#f4ac12","#9ebbc1","#f7f4e2"],"#e7e8d4"],["hilda02",["#eb5627","#eebb20","#4e9eb8","#f7f5d0"],"#77c1c0"],["hilda03",["#e95145","#f8b917","#b8bdc1","#ffb2a2"],"#6b7752"],["hilda04",["#e95145","#f6bf7a","#589da1","#f5d9bc"],"#f5ede1"],["hilda05",["#ff6555","#ffb58f","#d8eecf","#8c4b47","#bf7f93"],"#ffda82"],["hilda06",["#f75952","#ffce84","#74b7b2","#f6f6f6","#b17d71"],"#f6ecd4"],["spatial01",["#ff5937","#f6f6f4","#4169ff"],"#f6f6f4"],["spatial02",["#ff5937","#f6f6f4","#f6f6f4"],"#f6f6f4"],["spatial02i",["#f6f6f4","#ff5937","#ff5937"],"#ff5937"],["spatial03",["#4169ff","#f6f6f4","#f6f6f4"],"#f6f6f4"],["spatial03i",["#f6f6f4","#4169ff","#4169ff"],"#4169ff"],["jung_bird",["#fc3032","#fed530","#33c3fb","#ff7bac","#fda929"],"#ffffff"],["jung_horse",["#e72e81","#f0bf36","#3056a2"],"#ffffff"],["jung_croc",["#f13274","#eed03e","#405e7f","#19a198"],"#ffffff"],["jung_hippo",["#ff7bac","#ff921e","#3ea8f5","#7ac943"],"#ffffff"],["jung_wolf",["#e51c39","#f1b844","#36c4b7","#666666"],"#ffffff"],["system.#01",["#ff4242","#fec101","#1841fe","#fcbdcc","#82e9b5"],"#fff"],["system.#02",["#ff4242","#ffd480","#1e365d","#edb14c","#418dcd"],"#fff"],["system.#03",["#f73f4a","#d3e5eb","#002c3e","#1aa1b1","#ec6675"],"#fff"],["system.#04",["#e31f4f","#f0ac3f","#18acab","#26265a","#ea7d81","#dcd9d0"],"#26265a"],["system.#05",["#db4549","#d1e1e1","#3e6a90","#2e3853","#a3c9d3"],"#fff"],["system.#06",["#e5475c","#95b394","#28343b","#f7c6a3","#eb8078"],"#fff"],["system.#07",["#d75c49","#f0efea","#509da4"],"#fff"],["system.#08",["#f6625a","#92b29f","#272c3f"],"#fff"],["empusa",["#c92a28","#e69301","#1f8793","#13652b","#e7d8b0","#48233b","#e3b3ac"],"#f0f0f2"],["delphi",["#475b62","#7a999c","#2a1f1d","#fbaf3c","#df4a33","#f0e0c6","#af592c"],"#f0e0c6"],["mably",["#13477b","#2f1b10","#d18529","#d72a25","#e42184","#138898","#9d2787","#7f311b"],"#dfc792"],["nowak",["#e85b30","#ef9e28","#c6ac71","#e0c191","#3f6279","#ee854e","#180305"],"#ede4cb"],["jupiter",["#c03a53","#edd09e","#aab5af","#023629","#eba735","#8e9380","#6c4127"],"#e6e2d6"],["hersche",["#df9f00","#1f6f50","#8e6d7f","#da0607","#a4a5a7","#d3d1c3","#42064f","#25393a"],"#f0f5f6"],["cherfi",["#99cb9f","#cfb610","#d00701","#dba78d","#2e2c1d","#bfbea2","#d2cfaf"],"#e3e2c5"],["harvest",["#313a42","#9aad2e","#f0ae3c","#df4822","#8eac9b","#cc3d3f","#ec8b1c","#1b9268"],"#e5e2cf"],["honey",["#f14d42","#f4fdec","#4fbe5d","#265487","#f6e916","#f9a087","#2e99d6"],"#f4fdec"],["jungle",["#adb100","#e5f4e9","#f4650f","#4d6838","#cb9e00","#689c7d","#e2a1a8","#151c2e"],"#cecaa9"],["skyspider",["#f4b232","#f2dbbd","#01799c","#e93e48","#0b1952","#006748","#ed817d"],"#f0dbbc"],["atlas",["#5399b1","#f4e9d5","#de4037","#ed942f","#4e9e48","#7a6e62"],"#f0c328"],["giftcard",["#FBF5E9","#FF514E","#FDBC2E","#4561CC","#2A303E","#6CC283","#A71172","#238DA5","#9BD7CB","#231E58","#4E0942"],"#FBF5E9"],["giftcard_sub",["#FBF5E9","#FF514E","#FDBC2E","#4561CC","#2A303E","#6CC283","#238DA5","#9BD7CB"],"#FBF5E9"],["dale_paddle",["#ff7a5a","#765aa6","#fee7bc","#515e8c","#ffc64a","#b460a6","#ffffff","#4781c1"],"#abe9e8"],["dale_night",["#ae5d9d","#f1e8bc","#ef8fa3","#f7c047","#58c9ed","#f77150"],"#00ae83"],["dale_cat",["#f77656","#f7f7f7","#efc545","#dfe0e2","#3c70bd","#66bee4"],"#f6e0b8"],["cako1",["#000000","#d55a3a","#2a5c8a","#7e7d14","#dbdac9"],"#f4e9d5"],["cako2",["#dbdac9","#d55a3a","#2a5c8a","#b47b8c","#7e7d14"],"#000000"],["cako2_sub1",["#dbdac9","#d55a3a","#2a5c8a"],"#000000"],["cako2_sub2",["#dbdac9","#d55a3a","#7e7d14"],"#000000"],["mayo1",["#ea510e","#ffd203","#0255a3","#039177","#111111"],"#fff"],["mayo2",["#ea663f","#f9cc27","#84afd7","#7ca994","#f1bbc9","#242424"],"#f5f6f1"],["mayo3",["#ea5b19","#f8c9b9","#137661","#2a2a2a"],"#f5f4f0"],["exposito",["#8bc9c3","#ffae43","#ea432c","#228345","#d1d7d3","#524e9c","#9dc35e","#f0a1a1"],"#000000"],["exposito_sub1",["#8bc9c3","#ffae43","#ea432c","#524e9c"],"#000000"],["exposito_sub2",["#8bc9c3","#ffae43","#ea432c","#524e9c","#f0a1a1","#228345"],"#000000"],["exposito_sub3",["#ffae43","#ea432c","#524e9c","#f0a1a1"],"#000000"],["candy-wrap",["#f19797","#f9b73e","#ee5151","#fb671f","#6bbe3a","#0c75b7","#0b9e4e","#763f68"],"#e7ded5"],["slicks",["#e1decd","#d95336","#e6ac1d"],"#e1decd"],["circus",["#3eb79e","#f4a910","#f37377","#207986","#f26003","#afce95"],"#eadcb6"],["spotlight",["#f34312","#00a49e","#ef888f","#f5b408","#412432"],"#dfdcd5"],["five-stars",["#f5e8c7","#d9dcad","#cf3933","#f3f4f4","#74330d","#8bb896","#eba824","#f05c03"],"#ecd598"],["full-moon",["#f7e8be","#aa879f","#f6634e"],"#f7e8be"],["sunday-stroll",["#d44c4c","#e47781","#f5d274","#f7e8be","#acbe55","#6fb97a","#5ba150","#037750","#003e5e","#595373","#73659e","#ac879f"],"#e5cbb5"],["vegetable-soup",["#ec6a22","#f7e9c5","#399a3f","#9ac764","#fff7e0","#ffcd6b","#634754","#98c195","#708658"],"#fff7e0"],["risograph",["#f56f64","#f9cb1f","#f0eace"],"#f0eace"],["tote-bag",["#f5f5f5","#ffc6cf","#fd5105","#4124b0"],"#ffc6cf"],["slicks",["#ffbdd0","#ff4328","#e88526","#21b929","#2193c9","#fffcea","#ffcc21"],"#212121"]];
 
+let inkPressMem = 0;   // fallback press counter — storage may be blocked entirely
 function newInks(){
-  let n = 0;
-  try { n = parseInt(localStorage.getItem('tendril-garden-inkpress') || '0', 10) || 0; } catch (e) {}
+  let n = inkPressMem;
+  try { n = Math.max(n, parseInt(localStorage.getItem('tendril-garden-inkpress') || '0', 10) || 0); } catch (e) {}
   n++;
+  inkPressMem = n;
   try { localStorage.setItem('tendril-garden-inkpress', String(n)); } catch (e) {}
   const f = forgeInks(INK_PALS, n);
   params.bg = f.bg;
@@ -3792,6 +3856,8 @@ function saveSettings(){
   try {
     const keep = Object.assign({}, params);
     delete keep.seed;
+    keep.__presetKeys = presetKeys;          // so preset switching reverts correctly after reload
+    keep.__activePreset = activePreset;
     localStorage.setItem(STORE, JSON.stringify(keep));
   } catch (e) {}
 }
@@ -3800,6 +3866,9 @@ function loadSettings(){
     const raw = localStorage.getItem(STORE);
     if (!raw) return false;
     const saved = JSON.parse(raw);
+    if (Array.isArray(saved.__presetKeys)) presetKeys = saved.__presetKeys;
+    if (typeof saved.__activePreset === 'string') activePreset = saved.__activePreset;
+    delete saved.__presetKeys; delete saved.__activePreset;
     // anything that arrived in the share link wins over local settings
     for (const k in saved) if (k in params && !(fromHash && fromHash[k])) params[k] = saved[k];
     return true;
@@ -3841,7 +3910,8 @@ function keepDrawing(){
   const th = document.createElement('canvas');
   th.width = th.height = 208;
   th.getContext('2d').drawImage(cv, 0, 0, 208, 208);
-  shelf.push({ t: Date.now(), p: btoa(JSON.stringify(params)),
+  shelf.push({ t: Date.now(),
+               p: btoa(JSON.stringify(typeof currentRecipe === 'function' ? currentRecipe() : params)),
                img: th.toDataURL('image/jpeg', 0.8) });
   while (shelf.length > SHELF_MAX) shelf.shift();
   saveShelf(); paintShelf();
@@ -3853,6 +3923,7 @@ function restoreKeep(i){
   let saved; try { saved = JSON.parse(atob(e.p)); } catch (err) { return; }
   for (const k in saved) if (k in params) params[k] = saved[k];
   activePreset = 'kept';
+  presetKeys = [];         // a kept recipe is self-contained; no preset to revert
   syncControls(); paintChrome(); saveSettings();
   drawer(null);
   initializeSystem();
