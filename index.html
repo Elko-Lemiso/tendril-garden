@@ -2380,6 +2380,7 @@ input[type=range]::-moz-range-thumb{width:2px;height:12px;background:var(--mid);
             grid.forEach(arr => {
                 for (let i = 0; i < arr.length; i++) {
                     const p = arr[i];
+                    if (p.id < 0) continue;    // phantom void sentinels are not ink
                     const gx = Math.min(DN - 1, Math.max(0, Math.floor(p.x * DN / W)));
                     const gy = Math.min(DN - 1, Math.max(0, Math.floor(p.y * DN / H)));
                     f[gy * DN + gx]++;
@@ -2431,7 +2432,7 @@ input[type=range]::-moz-range-thumb{width:2px;height:12px;background:var(--mid);
 
         // how claimed the ground is at a point, 0 (bare) .. 1 (packed)
         function occupancyAt(x, y) {
-            if (!densField) return 0.5;
+            if (!densField || frameCount2 - densStamp > 40) buildDensity();
             const gx = Math.min(DN - 1, Math.max(0, Math.floor(wrapX(x) * DN / W)));
             const gy = Math.min(DN - 1, Math.max(0, Math.floor(wrapY(y) * DN / H)));
             return densField[gy * DN + gx] / densMax;
@@ -2523,7 +2524,7 @@ input[type=range]::-moz-range-thumb{width:2px;height:12px;background:var(--mid);
                     const px = anchor.x + Math.cos(kh) * c * d;
                     const py = anchor.y + Math.sin(kh) * c * d;
                     if ((!tiling() && (px < MARGIN || px > W - MARGIN || py < MARGIN || py > H - MARGIN)) ||
-                        isBlocked(px, py, kid.id, 0, Infinity, kid.exempt)) runway = false;
+                        isBlocked(px, py, kid.id, 0, Infinity, kid.exempt, cHere)) runway = false;
                 }
                 if (!runway) continue;
                 parent.hosts = (parent.hosts || 0) + 1;
