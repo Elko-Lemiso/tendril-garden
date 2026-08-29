@@ -279,7 +279,7 @@ input[type=range]::-moz-range-thumb{width:2px;height:12px;background:var(--mid);
       <div class="row" style="margin-bottom:14px">
         <span class="eng">Preset</span>
         <div class="segstrip" data-k="preset">
-          <button data-v="classic">classic</button><button data-v="circuit">circuit</button>
+          <button data-v="ornate">ornate</button><button data-v="classic">classic</button><button data-v="circuit">circuit</button>
           <button data-v="topography">topo</button><button data-v="meander">meander</button>
           <button data-v="mandala">mandala</button><button data-v="coloring">coloring</button>
           <button data-v="tree">tree</button><button data-v="textile">textile</button>
@@ -338,9 +338,19 @@ input[type=range]::-moz-range-thumb{width:2px;height:12px;background:var(--mid);
         </div>
         <div class="col">
           <div class="row"><span class="eng">Rhythm</span>
-            <div class="segstrip" data-k="rhythm"><button data-v="off">off</button><button data-v="loose">loose</button><button data-v="strict">strict</button></div></div>
+            <div class="segstrip" data-k="rhythm"><button data-v="off">off</button><button data-v="loose">loose</button><button data-v="strict">strict</button><button data-v="full">full</button></div></div>
           <div class="row"><span class="eng">Sees the page</span>
             <div class="segstrip" data-k="vacancy"><button data-v="off">off</button><button data-v="on">on</button></div></div>
+          <div class="row"><span class="eng">Follows the space</span>
+            <div class="segstrip" data-k="grain"><button data-v="off">off</button><button data-v="on">on</button></div></div>
+          <div class="row"><span class="eng">Curls along the way</span>
+            <div class="segstrip" data-k="curl"><button data-v="off">off</button><button data-v="on">on</button></div></div>
+          <div class="row"><span class="eng">Coming back around</span>
+            <div class="segstrip" data-k="ret"><button data-v="off">off</button><button data-v="gentle">gentle</button><button data-v="strong">strong</button></div></div>
+          <div class="row"><span class="eng">Family character</span>
+            <div class="segstrip" data-k="family"><button data-v="off">off</button><button data-v="on">on</button></div></div>
+          <div class="row"><span class="eng">Composition sense</span>
+            <div class="segstrip" data-k="compose"><button data-v="off">off</button><button data-v="on">on</button></div></div>
           <div class="row"><span class="eng">Finer infill passes</span>
             <div class="segstrip" data-k="detail"><button data-v="on">on</button><button data-v="off">off</button></div></div>
           <div class="row"><span class="eng">Mark the start</span>
@@ -386,7 +396,7 @@ input[type=range]::-moz-range-thumb{width:2px;height:12px;background:var(--mid);
         </div>
       </div>
       <div class="foot">
-        <span class="eng" style="opacity:.75">esc close &middot; space new drawing &middot; i new inks &middot; k keep &middot; &larr;&rarr; seed &middot; r regrow same seed &middot; 1&ndash;5 tools &middot; h hide</span>
+        <span class="eng" style="opacity:.75">esc close &middot; space new drawing &middot; i new inks &middot; k keep &middot; &#8984;Z step back &middot; &#8679;&#8984;Z forward &middot; &larr;&rarr; seed &middot; r regrow same seed &middot; 1&ndash;5 tools &middot; h hide</span>
         <span class="words"><button class="word eng" onclick="regenerate()">Regrow same seed</button>
         <button class="word eng" onclick="clearZones()">Clear zones</button>
         <button class="word eng" onclick="blankCanvas()">Clear canvas</button>
@@ -472,8 +482,13 @@ input[type=range]::-moz-range-thumb{width:2px;height:12px;background:var(--mid);
             latticeAngle: 60,
             branching: 4,
             coilTendency: 4,
-            vacancy: 'off',
-            rhythm: 'off',
+            vacancy: 'on',
+            rhythm: 'full',      // off / loose / strict / full (full = phrase system)
+            curl: 'on',          // traveling curls: turn around a center, exit, continue
+            ret: 'gentle',       // return tendency: off / gentle / strong
+            family: 'on',        // inheritance, generations, alternating branching
+            compose: 'on',       // voids, crown, fence, density targets, dignity
+            grain: 'on',         // directional grain: travel along the space's axis
             bg: '#1e1c18',
             colorPalette: ['#743b16', '#c97b4a', '#7fa08a']
         };
@@ -490,6 +505,10 @@ input[type=range]::-moz-range-thumb{width:2px;height:12px;background:var(--mid);
                 fromHash = {};
                 for (const k in shared) if (k in params) { params[k] = shared[k]; fromHash[k] = true; }
             }
+            // a link minted before the ornament grammar existed reproduces
+            // the drawing it always made: missing switches read as off
+            if (fromHash) for (const k of ['vacancy', 'rhythm', 'curl', 'ret', 'family', 'compose', 'grain'])
+                if (!fromHash[k]) { params[k] = 'off'; fromHash[k] = true; }
         } catch (e) { fromHash = null; /* malformed hash — ignore */ }
 
         const W = 1200, H = 1200;
@@ -814,6 +833,64 @@ input[type=range]::-moz-range-thumb{width:2px;height:12px;background:var(--mid);
             };
         }
 
+        // Rule 47, generalized: every ornament mechanism draws from its own
+        // hashed generator, seeded by (drawing seed, purpose tag, line id).
+        // The shared seeded random() stream is never touched — switching any
+        // mechanism on or off cannot re-roll a legacy drawing.
+        function ornRand(tag, id) {
+            let h = 2166136261 >>> 0;
+            for (let i = 0; i < tag.length; i++) { h ^= tag.charCodeAt(i); h = Math.imul(h, 16777619); }
+            return rhythmRand(params.seed ^ h, id === undefined ? -1 : id);
+        }
+
+        // proportional memory (rule 30): related dimensions reuse related
+        // ratios — a small palette, not a continuous smear. φ is one option,
+        // not a commandment.
+        const RATIOS = [1, 1 / 2, 2 / 3, 3 / 5, 1 / 1.61803];
+        function pickRatio(r) { return RATIOS[Math.floor(r() * RATIOS.length)]; }
+
+        // Family heritage (rules 35/36/37/30/43): descendants inherit
+        // tendencies — handedness, curl-proneness, branch rhythm, a size
+        // ratio from the proportional palette — with occasional mutation.
+        // Built lazily and deterministically from line ids; zero shared draws.
+        function makeHeritage(id, parentOrn, parentCurls) {
+            const r = ornRand('fam', id);
+            if (!parentOrn) return {
+                gen: 0, famId: id,
+                hand: r() < 0.5 ? 1 : -1,
+                curlProb: 0.007 + r() * 0.010,
+                branchSeq: [[1, -1], [1, 1, -1], [-1, 1], [-1, -1, 1]][Math.floor(r() * 4)],
+                seqAt: 0,
+                ratio: pickRatio(r),
+            };
+            const mut = () => r() < 0.18;
+            return {
+                gen: parentOrn.gen + 1, famId: parentOrn.famId,
+                hand: mut() ? -parentOrn.hand : parentOrn.hand,
+                // recursive echo (rule 43): a curling ancestor begets
+                // curl-prone descendants — topology echoes, never copies
+                curlProb: Math.min(0.03, parentOrn.curlProb * (mut() ? 0.6 + r() * 1.2 : 1) + (parentCurls || 0) * 0.004),
+                branchSeq: mut() ? parentOrn.branchSeq.slice().reverse() : parentOrn.branchSeq,
+                seqAt: 0,
+                ratio: mut() ? pickRatio(r) : parentOrn.ratio,
+            };
+        }
+        // generational freedom (rule 36): early generations organize the
+        // space — later ones decorate and resolve. Past generation three a
+        // line neither forks nor anchors new colonists.
+        function forkGenK(t) {
+            const o = ornOf(t);
+            return o ? (o.gen >= 4 ? 0 : o.gen <= 1 ? 1.2 : 0.7) : 1;
+        }
+
+        function ornOf(t) {
+            if (params.family !== 'on') return null;
+            if (!t.orn) t.orn = makeHeritage(t.id,
+                t.parentRef ? ornOf(t.parentRef) : null,
+                t.parentRef ? t.parentRef.curlsMade : 0);
+            return t.orn;
+        }
+
         function makeRhythm(id) {
             const r = rhythmRand(params.seed, id);
             const motifs = [
@@ -825,9 +902,21 @@ input[type=range]::-moz-range-thumb{width:2px;height:12px;background:var(--mid);
             const m = motifs[Math.floor(r() * motifs.length)];
             const base = 2.2 + r() * 2.2;                 // beat length, in clearances
             const angle = params.style === 'angular' ? LAT() : radians(40 + r() * 35);
-            return { turns: m.turns, runs: m.runs.map(u => u * base),
+            const full = params.rhythm === 'full';
+            return { turns: m.turns.slice(), runs: m.runs.map(u => u * base),
                      angle, at: 0, traveled: 0, jitter: 1, rand: r,
-                     strict: params.rhythm === 'strict' };
+                     strict: params.rhythm === 'strict',
+                     // the phrase system (rules 25-29), 'full' only — every
+                     // conditional draw below happens ONLY when full, so the
+                     // loose/strict streams are untouched
+                     full,
+                     cyclesLeft: full ? 2 + Math.floor(r() * 4) : Infinity,
+                     varAmp: full ? 0.05 + r() * 0.12 : 0,
+                     hands: full ? [[1, 1, 1], [1, -1], [1, 1, -1]][Math.floor(r() * 3)] : [1],
+                     handAt: 0,
+                     cadenceEvery: full ? 3 + Math.floor(r() * 3) : Infinity,
+                     phrases: 0,
+                     override: null };
         }
         function snapLat(h) { return Math.round(h / LAT()) * LAT(); }
 
@@ -898,8 +987,10 @@ input[type=range]::-moz-range-thumb{width:2px;height:12px;background:var(--mid);
                         if (dx * dx + dy * dy >= c2) continue;
                         if (p.id !== id) {
                             // a sprout may share space with its parent's trail,
-                            // but only inside the disc around its birth point
-                            if (ex && p.id === ex.pid) {
+                            // but only inside the disc around its birth point —
+                            // a mirrored twin extends the same courtesy to its
+                            // sibling (ex.pid2), or the pair could never be born
+                            if (ex && (p.id === ex.pid || p.id === ex.pid2)) {
                                 const bx = p.x - ex.bx, by = p.y - ex.by;
                                 if (bx * bx + by * by < ex.r2) continue;
                             }
@@ -937,6 +1028,11 @@ input[type=range]::-moz-range-thumb{width:2px;height:12px;background:var(--mid);
                 this.exempt = null;
                 this.runLeft = 0;        // straight-run cooldown after any turn
                 this.rhythm = null;      // lazily built motif memory (rhythm switch)
+                this.orn = null;         // family heritage bag (family switch)
+                this.curlsMade = 0;      // traveling curls completed (echo signal)
+                this.curlWish = false;   // a cadence asked for a curl
+                this.forkWish = false;   // a cadence asked for a branch
+                this.retAnchor = null;   // return-tendency target (rule 33)
                 this.lastHit = -999;     // when this line last had to dodge something
                 this.cornerMode = false; // two hits in quick succession = a corner
                 this.backtracks = 0;     // retreat-and-retry budget
@@ -1057,10 +1153,125 @@ input[type=range]::-moz-range-thumb{width:2px;height:12px;background:var(--mid);
             // scan a fan of directions and pick the most open one, mildly
             // preferring the current course; never reverse. Angular style scans
             // the lattice, organic scans a smooth fan.
+            // One full pass of the motif = one phrase cycle. Phrases are
+            // bounded (rule 25), vary within tolerance (26), carry handedness
+            // patterns (27), transform rather than reset (28), and cadence
+            // into distinct grammar-generated events (29, honoring 46).
+            // Every draw comes from the rhythm's own private generator.
+            phraseTick(rh) {
+                rh.handAt++;
+                if (rh.override) { if (--rh.override.left <= 0) rh.override = null; return; }
+                if (rh.varAmp) rh.jitter *= 1 + (rh.rand() - 0.5) * 2 * rh.varAmp;   // A A' A''
+                if (--rh.cyclesLeft > 0) return;
+                rh.phrases++;
+                const r = rh.rand;
+                if (rh.phrases % rh.cadenceEvery === 0) {
+                    const ev = r();
+                    if (ev < 0.3 && params.curl === 'on') this.curlWish = true;
+                    else if (ev < 0.55) this.forkWish = true;
+                    else rh.override = { turns: [1, 1], runs: [1.4, 1.4], left: 2 }; // the double-back
+                }
+                const op = r();
+                if (op < 0.3) rh.turns = rh.turns.map(t => -t);                          // mirror
+                else if (op < 0.5) { rh.turns.reverse(); rh.runs.reverse(); }            // retrograde
+                else if (op < 0.7) { rh.turns.push(rh.turns.shift()); rh.runs.push(rh.runs.shift()); } // glide
+                else {                                                                   // fresh phrase
+                    const m = [[[1, -1], [1, 1]], [[1, 1, -1, -1], [1, 0.55, 1, 0.55]],
+                               [[1, -1], [1.6, 0.7]], [[-1, -1, 1, 1], [0.8, 0.8, 0.8, 0.8]]][Math.floor(r() * 4)];
+                    const base = 2.2 + r() * 2.2;
+                    rh.turns = m[0].slice(); rh.runs = m[1].map(u => u * base);
+                }
+                rh.cyclesLeft = 2 + Math.floor(r() * 4);
+            }
+
+            // Traveling curl (rule 32): turn most of the way around a local
+            // center, exit on the tangent, keep going. NOT a termination —
+            // terminal spirals remain their own concept. The whole path is
+            // validated against the grid BEFORE a single point is inked, so
+            // never-touch holds by construction: curls that don't fit simply
+            // don't happen. Behavioral equivalence (rule 34): the same
+            // advance-around-return topology renders as a smooth arc in
+            // organic/flowing and as a lattice polygon in angular.
+            tryTravelCurl() {
+                const c = this.cw();
+                const r = this.curlRand;
+                const r0 = c * (2.4 + r() * 2.2);
+                const side = (this.orn ? this.orn.hand : (r() < 0.5 ? 1 : -1)) * this.dir;
+                const cx = this.x + Math.cos(this.heading + side * HALF_PI) * r0;
+                const cy = this.y + Math.sin(this.heading + side * HALF_PI) * r0;
+                // cheap room check before the expensive walk
+                const room = params.vacancy === 'on' ? vacAt(cx, cy)
+                           : this.openness(this.heading + side * HALF_PI, r0 * 2 + c) - r0;
+                if (room < r0 * 0.9) return false;
+                const pts = [];
+                const angular = params.style === 'angular';
+                if (angular) {
+                    // lattice curl: same-sign LAT() turns until ~285° of total turn
+                    let n = Math.max(3, Math.round((4.9 + r() * 0.6) / LAT()));
+                    // never a closed polygon: total turn stays under 330°, or
+                    // the last side lands on the line's own entry (self-touch)
+                    n = Math.min(n, Math.floor(radians(330) / LAT()));
+                    const sideLen = Math.max(STEP * 2, 2 * r0 * Math.sin(LAT() / 2));
+                    let hx = this.x, hy = this.y, hh = snapLat(this.heading);
+                    for (let k = 0; k < n; k++) {
+                        hh += side * LAT();
+                        const steps = Math.max(2, Math.round(sideLen / STEP));
+                        for (let q = 1; q <= steps; q++) {
+                            const px = wrapX(hx + Math.cos(hh) * STEP * q);
+                            const py = wrapY(hy + Math.sin(hh) * STEP * q);
+                            if (!tiling() && (px < MARGIN || px > W - MARGIN || py < MARGIN || py > H - MARGIN)) return false;
+                            if (isBlocked(px, py, this.id, this.idx, this.coilStartIdx, this.exempt, c)) return false;
+                            pts.push({ x: px, y: py, h: hh });
+                        }
+                        hx = pts[pts.length - 1].x; hy = pts[pts.length - 1].y;
+                    }
+                } else {
+                    const sweep = (4.2 + r() * 1.0) * side;     // 240-300 degrees
+                    const a0 = Math.atan2(this.y - cy, this.x - cx);
+                    const stepA = (STEP / r0) * side;
+                    for (let a = stepA; Math.abs(a) < Math.abs(sweep); a += stepA) {
+                        const px = wrapX(cx + Math.cos(a0 + a) * r0);
+                        const py = wrapY(cy + Math.sin(a0 + a) * r0);
+                        if (!tiling() && (px < MARGIN || px > W - MARGIN || py < MARGIN || py > H - MARGIN)) return false;
+                        if (isBlocked(px, py, this.id, this.idx, this.coilStartIdx, this.exempt, c)) return false;
+                        pts.push({ x: px, y: py, h: a0 + a + side * HALF_PI });
+                    }
+                }
+                if (pts.length < 6) return false;
+                for (const q of pts) {
+                    markSym(q.x, q.y, this.id, this.idx);
+                    this.trail.push({ x: q.x, y: q.y, idx: this.idx });
+                    this.idx++;
+                }
+                const last = pts[pts.length - 1];
+                this.x = last.x; this.y = last.y;
+                this.heading = angular ? snapLat(last.h) : last.h;
+                this.stepsAlive += pts.length;
+                this.runLeft = Math.ceil(c * 1.6 / STEP);
+                this.curlsMade++;
+                this.endZig(); this.merge = null;
+                return true;
+            }
+
             seekOpenHeading() {
                 const c = this.cw();
                 const angular = params.style === 'angular';
                 const h0 = angular ? snapLat(this.heading) : this.heading;
+                // return tendency (rule 33): the anchor is the line's own first
+                // point — birth for roots, the junction for branches. Purely
+                // deterministic: no draw is ever taken for it.
+                if (params.ret !== 'off' && !this.retAnchor && this.trail.length)
+                    this.retAnchor = { x: this.trail[0].x, y: this.trail[0].y };
+                // directional grain (rule 39): a long thin vacancy invites
+                // travel along its own axis; broad fields don't grip.
+                let gAxis = null, gStrength = 0;
+                if (params.grain === 'on' && params.vacancy === 'on') {
+                    const pk = pocketAt(this.x, this.y);
+                    if (pk && pk.elong > 1.6) {
+                        gAxis = pk.axis;
+                        gStrength = c * Math.min(1.4, (pk.elong - 1.3) * 0.7);
+                    }
+                }
                 let bestH = h0, bestS = -1, bestOpen = -1;
                 for (let k = -6; k <= 6; k++) {
                     const off = angular ? (Math.round(k / 2) * LAT()) : (k * 2.0 / 6);
@@ -1075,7 +1286,15 @@ input[type=range]::-moz-range-thumb{width:2px;height:12px;background:var(--mid);
                     const probe = params.vacancy === 'on'
                         ? 1 - Math.min(1, vacAt(px2, py2) / (c * 6))
                         : occupancyAt(px2, py2);
-                    const s = open - Math.abs(off) * c * 0.7 + (1 - probe) * c * 3.5;
+                    let bias = 0;
+                    if (gAxis !== null) bias += Math.cos(2 * (h - gAxis)) * gStrength;
+                    if (this.retAnchor) {
+                        const dx = tiling() ? dwrap(this.retAnchor.x - this.x, W) : this.retAnchor.x - this.x;
+                        const dy = tiling() ? dwrap(this.retAnchor.y - this.y, H) : this.retAnchor.y - this.y;
+                        if (dx * dx + dy * dy > c * c * 36)
+                            bias += Math.cos(h - Math.atan2(dy, dx)) * c * (params.ret === 'strong' ? 1.6 : 0.8);
+                    }
+                    const s = open - Math.abs(off) * c * 0.7 + (1 - probe) * c * 3.5 + bias;
                     if (s > bestS) { bestS = s; bestH = h; bestOpen = open; }
                 }
                 // NOTE: `score` is an openness DISTANCE in px (callers compare it
@@ -1345,7 +1564,8 @@ input[type=range]::-moz-range-thumb{width:2px;height:12px;background:var(--mid);
                             let crowded = false;
                             for (let q = 0; q < coilCenters.length && !crowded; q++) {
                                 const dx = coilCenters[q].x - cen.x, dy = coilCenters[q].y - cen.y;
-                                const need = (myR + coilCenters[q].r) * 0.8;
+                                const digK = params.compose === 'on' && (myR + coilCenters[q].r) > clr() * 7 ? 1.15 : 0.8;
+                                const need = (myR + coilCenters[q].r) * digK;
                                 if (dx * dx + dy * dy < need * need) crowded = true;
                             }
                             if (crowded && !corner) continue;
@@ -1492,6 +1712,7 @@ input[type=range]::-moz-range-thumb{width:2px;height:12px;background:var(--mid);
             // forks attached is instead truncated back to its last fork, so it
             // ends exactly where its branch carries the ink onward.
             eraseSelf() {
+                if (this.erased) return;   // cascades may reach a line twice; erasing is once-only
                 // a line that anchors living wave-branches must stay whole —
                 // erasing it would leave their junctions floating
                 if ((this.hosts || 0) > 0 && this.branches === 0) { this.state = 'done'; return; }
@@ -1500,6 +1721,9 @@ input[type=range]::-moz-range-thumb{width:2px;height:12px;background:var(--mid);
                 unmarkLine(this.id, this.trail, this.branches > 0 ? this.forkAtIdx : 0);
                 if (this.branches === 0) {
                     this.erased = true;
+                    // a resolved line's terminal coil lives in cells its trail
+                    // never visits — a scrub-commit erase must clear it too
+                    if (this.coilPath) unmarkLine(this.id, this.coilPath, 0);
                     if (this.originCoil && this.originGlyphId !== undefined) {
                         unmarkLine(this.originGlyphId, this.originCoil, 0);
                     }
@@ -1512,7 +1736,10 @@ input[type=range]::-moz-range-thumb{width:2px;height:12px;background:var(--mid);
                         // child of any kind still grows from it — then it
                         // cascades away too
                         if (pr.branches === 0 && !(pr.hosts > 0) &&
-                            pr.state === 'done' && !pr.coilPath && !pr.erased) {
+                            pr.state === 'done' && !pr.coilPath && !pr.erased &&
+                            // during a scrub commit the cascade must not climb
+                            // past the hidden suffix into lines the user KEPT
+                            (!committingHidden || committingHidden.has(pr.id))) {
                             pr.eraseSelf();
                         }
                     }
@@ -1627,7 +1854,8 @@ input[type=range]::-moz-range-thumb{width:2px;height:12px;background:var(--mid);
                 // In tree mode, voluntary endings happen only up in the canopy.
                 if (params.endings !== 'lines') {
                     const canopyOK = params.origin !== 'tree' || this.y < H * 0.55;
-                    if (canopyOK && this.stepsAlive > this.minSteps && random() < params.coilTendency / 1000) this.wantCoil = true;
+                    const famT = params.family === 'on' && this.orn && this.orn.gen >= 2 ? 1.8 : 1;
+                    if (canopyOK && this.stepsAlive > this.minSteps && random() < params.coilTendency * famT / 1000) this.wantCoil = true;
                     if (this.stepsAlive > this.maxSteps) this.wantCoil = true;
                 }
 
@@ -1708,9 +1936,11 @@ input[type=range]::-moz-range-thumb{width:2px;height:12px;background:var(--mid);
                     if (!this.rhythm) this.rhythm = makeRhythm(this.id);
                     const rh = this.rhythm;
                     rh.traveled += STEP;
-                    const beat = rh.runs[rh.at % rh.runs.length] * c * rh.jitter;
+                    const seq = rh.override || rh;   // a cadence event temporarily owns the meter
+                    const beat = seq.runs[rh.at % seq.runs.length] * c * rh.jitter;
                     if (rh.traveled >= beat) {
-                        const sign = rh.turns[rh.at % rh.turns.length] * this.dir;
+                        const hand = rh.hands[rh.handAt % rh.hands.length];
+                        const sign = seq.turns[rh.at % seq.turns.length] * this.dir * hand;
                         const baseH = params.style === 'angular' ? snapLat(this.heading) : this.heading;
                         const h = baseH + sign * rh.angle;
                         if (this.openness(h, c * 2.5) >= c * 2) {
@@ -1723,6 +1953,30 @@ input[type=range]::-moz-range-thumb{width:2px;height:12px;background:var(--mid);
                             rh.at++; rh.traveled = 0;   // skip the blocked beat
                         }
                         // strict holds course and retries the beat each step
+                        if (rh.full && rh.at > 0 && rh.at % seq.turns.length === 0) this.phraseTick(rh);
+                    }
+                }
+
+                // traveling curls (switch: params.curl) — probability and
+                // geometry come from a private generator, so the shared
+                // stream never notices whether curls exist
+                if (params.curl === 'on' && !this.zig && !this.merge && !this.wantCoil &&
+                    !this.follow && this.runLeft <= 0 && this.stepsAlive > 60 &&
+                    this.curlsMade < 2) {
+                    if (!this.curlRand) this.curlRand = ornRand('curl', this.id);
+                    const fam = ornOf(this);
+                    const wish = this.curlWish;
+                    const crownK = inCrown(this.x, this.y) ? 2.2 : 1;
+                    // habitat (rule 44): broad fields invite curls; in a narrow
+                    // channel the grain rules and curling is a wall-hit
+                    let habK = 1;
+                    if (params.vacancy === 'on') {
+                        const hab = habitatOf(pocketAt(this.x, this.y));
+                        habK = hab === 'channel' ? 0.35 : hab === 'field' ? 1.3 : 1;
+                    }
+                    if (wish || this.curlRand() < (fam ? fam.curlProb : 0.012) * crownK * habK) {
+                        this.curlWish = false;
+                        this.tryTravelCurl();
                     }
                 }
 
@@ -1732,8 +1986,14 @@ input[type=range]::-moz-range-thumb{width:2px;height:12px;background:var(--mid);
                 if (this.branches < (params.origin === 'tree' ? 3 : 2) &&
                     this.stepsAlive > 40 && this.runLeft <= 0 && !this.zig && !this.merge &&
                     tendrils.length < params.tendrilCount * 2 &&
-                    random() < params.branching * (params.origin === 'tree' ? 3 : 1) / 1000) {
-                    const side = random() < 0.5 ? 1 : -1;
+                    (random() < params.branching * (params.origin === 'tree' ? 3 : 1) * forkGenK(this) / 1000 ||
+                     (this.forkWish && forkGenK(this) > 0))) {
+                    this.forkWish = false;
+                    const roll = random() < 0.5 ? 1 : -1;    // draw stays, always
+                    const fam = ornOf(this);
+                    // alternating branching (rule 37): branch sides follow the
+                    // family's own rhythm — L/R/L/R, L/L/R — scaled by its hand
+                    const side = fam ? fam.branchSeq[fam.seqAt++ % fam.branchSeq.length] * fam.hand : roll;
                     const angularStyle = params.style === 'angular';
                     // branches leave at a plant-like 30–45° (45° on the lattice),
                     // then straighten to run parallel to this line
@@ -1758,6 +2018,18 @@ input[type=range]::-moz-range-thumb{width:2px;height:12px;background:var(--mid);
                         kid.exempt = { pid: this.id, bx: this.x, by: this.y, r2: Math.pow(c * 2.6, 2) };
                         kid.colIdx = this.colIdx;
                         kid.parentRef = this;
+                        if (fam) {
+                            // scale ladder (31) via the ratio palette (30);
+                            // early generations organize, later ones decorate
+                            // and resolve (36)
+                            kid.orn = makeHeritage(kid.id, fam, this.curlsMade);
+                            // scale ladder (31): major, secondary, minor — and
+                            // no further; endless shrinking is just noise
+                            kid.scale = Math.max(0.5, Math.pow(kid.orn.ratio, Math.min(kid.orn.gen, 2)));
+                            const g = kid.orn.gen, m = g <= 1 ? 1.2 : g === 2 ? 0.8 : 0.55;
+                            kid.minSteps = Math.floor(kid.minSteps * m);
+                            kid.maxSteps = Math.floor(kid.maxSteps * m);
+                        }
                         kid.trail.push({ x: this.x, y: this.y, idx: -1 });
                         // once the branch has gained a clean lateral offset, it
                         // straightens back parallel to its parent's course
@@ -1767,6 +2039,43 @@ input[type=range]::-moz-range-thumb{width:2px;height:12px;background:var(--mid);
                         this.forkAtIdx = this.idx;               // truncation point if
                         this.forkTrailAt = this.trail.length - 1; // this line later fails
                         this.runLeft = Math.ceil(c * 2 / STEP);
+                        // local symmetry event (rule 38): occasionally the fork
+                        // becomes a mirrored PAIR about the parent's course —
+                        // fans and palmettes emerge, the page stays asymmetric
+                        if (params.compose === 'on' &&
+                            this.branches < (params.origin === 'tree' ? 3 : 2)) {
+                            if (!this.symRand) this.symRand = ornRand('symev', this.id);
+                            if (this.symRand() < (inCrown(this.x, this.y) ? 0.28 : 0.08)) {
+                                const kh2 = baseH - side * forkAngle;
+                                let run2 = true;
+                                for (let d = 2; d <= 4 && run2; d++) {
+                                    const px = this.x + Math.cos(kh2) * c * d;
+                                    const py = this.y + Math.sin(kh2) * c * d;
+                                    if ((!tiling() && (px < MARGIN || px > W - MARGIN || py < MARGIN || py > H - MARGIN)) ||
+                                        isBlocked(px, py, this.id, this.idx, this.coilStartIdx, null, this.cw())) run2 = false;
+                                }
+                                if (run2) {
+                                    const twin = new Tendril(tendrils.length, 0);
+                                    twin.state = 'growing';
+                                    twin.x = this.x; twin.y = this.y;
+                                    twin.heading = kh2;
+                                    twin.exempt = { pid: this.id, pid2: kid.id,
+                                                    bx: this.x, by: this.y, r2: Math.pow(c * 2.6, 2) };
+                                    twin.colIdx = this.colIdx;
+                                    twin.parentRef = this;
+                                    if (fam) {
+                                        twin.orn = makeHeritage(twin.id, fam, this.curlsMade);
+                                        twin.orn.hand = -(kid.orn ? kid.orn.hand : 1);  // mirrored chirality
+                                        twin.scale = kid.scale;
+                                        twin.minSteps = kid.minSteps; twin.maxSteps = kid.maxSteps;
+                                    }
+                                    twin.trail.push({ x: this.x, y: this.y, idx: -1 });
+                                    twin.merge = { h: baseH, need: kid.merge.need };
+                                    tendrils.push(twin);
+                                    this.branches++;
+                                }
+                            }
+                        }
                     }
                 }
 
@@ -1926,6 +2235,50 @@ input[type=range]::-moz-range-thumb{width:2px;height:12px;background:var(--mid);
 
         let fillExhausted = false;
         let emptyWaves = 0;        // only several consecutive empty waves mean "full"
+        // ── COMPOSITION (switch: params.compose) ─────────────────────────
+        // Rules 22/23/40/41/42: a drawing may hold protected voids ("available"
+        // is not "must be occupied"), seeks a density TARGET rather than
+        // maximum occupation, allows one off-center crown where intensity may
+        // peak, keeps a quieter fence around it, and grants big resolved forms
+        // enough surrounding air to stay legible. The whole plan is drawn from
+        // a private generator — the shared stream never hears about it.
+        let composePlan = null;
+        function makeComposePlan() {
+            if (params.compose !== 'on') { composePlan = null; return; }
+            const r = ornRand('compose', 0);
+            const thirds = [[W / 3, H / 3], [2 * W / 3, H / 3], [W / 3, 2 * H / 3], [2 * W / 3, 2 * H / 3]];
+            const t = thirds[Math.floor(r() * 4)];
+            const crown = { x: t[0] + (r() - 0.5) * W * 0.08,
+                            y: t[1] + (r() - 0.5) * H * 0.08,
+                            r: W * (0.12 + r() * 0.06) };
+            const voids = [];
+            const nv = maskArr ? 0 : (r() < 0.25 ? 2 : r() < 0.75 ? 1 : 0);
+            for (let i = 0; i < nv; i++) {
+                for (let tr = 0; tr < 20; tr++) {
+                    const vx = W * (0.12 + r() * 0.76), vy = H * (0.12 + r() * 0.76);
+                    const vr = W * (0.05 + r() * 0.06);
+                    if (Math.hypot(vx - crown.x, vy - crown.y) > crown.r + vr + clr() * 4 &&
+                        voids.every(v => Math.hypot(vx - v.x, vy - v.y) > v.r + vr + clr() * 3)) {
+                        voids.push({ x: vx, y: vy, r: vr });
+                        break;
+                    }
+                }
+            }
+            composePlan = { crown, voids, target: 0.55 + r() * 0.2 };
+        }
+        function targetAt(x, y) {
+            if (!composePlan) return 1;
+            const cp = composePlan.crown;
+            const d = Math.hypot(x - cp.x, y - cp.y);
+            if (d < cp.r) return 1;                              // the crown may peak
+            if (d < cp.r * 1.8) return composePlan.target * 0.55; // the fence stays quiet
+            return composePlan.target;
+        }
+        function inCrown(x, y) {
+            return composePlan &&
+                Math.hypot(x - composePlan.crown.x, y - composePlan.crown.y) < composePlan.crown.r;
+        }
+
         let coilCenters = [];      // committed spiral centers, for spacing between spirals
         let shapeTally = { circle: 0, triangle: 0, square: 0 };
         let inkTurn = 0;
@@ -2094,7 +2447,7 @@ input[type=range]::-moz-range-thumb{width:2px;height:12px;background:var(--mid);
                 for (let k = 0; k < poly.length; k += 2) markSym(poly[k].x, poly[k].y, -998, 0);
             }
             for (const d2 of dots) markSym(d2.x, d2.y, -998, 0);
-            doodles.push({ colIdx, polys, dots, cx: x, cy: y, cr: r });
+            doodles.push({ colIdx, polys, dots, cx: x, cy: y, cr: r, seq: tendrils.length });
             for (const xf of symXforms()) {
                 const q = xf({ x, y });
                 doodles.push({
@@ -2182,7 +2535,8 @@ input[type=range]::-moz-range-thumb{width:2px;height:12px;background:var(--mid);
             // the law the drawing is grown UNDER — every later repaint, export,
             // and grid edit answers to these, however the settings are re-armed
             grown = { symmetry: params.symmetry, tile: params.tile,
-                      style: params.style, lineWidth: params.lineWidth };
+                      style: params.style, lineWidth: params.lineWidth,
+                      family: params.family };
             grownParams = JSON.parse(JSON.stringify(params));
             noiseSeed(params.seed);
 
@@ -2196,12 +2550,27 @@ input[type=range]::-moz-range-thumb{width:2px;height:12px;background:var(--mid);
             growPhase = 'primary';
             densField = null; densTries = null; maskCells = null;
             vacField = null; vacStamp = -1;
+            vacPockets = null; vacPocketStamp = -2;
             // painted keep-clear zones survive regeneration
             for (const z of brushZones) {
                 markSym(z.x, z.y, -997, 0);
                 for (let a = 0; a < 8; a++) {
                     markSym(z.x + Math.cos(a * PI / 4) * z.r, z.y + Math.sin(a * PI / 4) * z.r, -997, 0);
                 }
+            }
+            // intentional voids (rule 22): protected emptiness, reserved like
+            // hand-painted keep-clear zones, invisible in the render
+            revealCut = -1;
+            makeComposePlan();
+            if (composePlan) {
+                // sentinel spacing must undercut the FINEST pass's working
+                // clearance (0.32 x clr), or detail lines thread the void
+                const spacing = Math.max(3, clr() * 0.28);
+                for (const v of composePlan.voids)
+                    for (let vy = v.y - v.r; vy <= v.y + v.r; vy += spacing)
+                        for (let vx = v.x - v.r; vx <= v.x + v.r; vx += spacing)
+                            if ((vx - v.x) ** 2 + (vy - v.y) ** 2 <= v.r * v.r)
+                                markSym(vx, vy, -996, 0);
             }
 
             coilCenters = [];
@@ -2367,7 +2736,13 @@ input[type=range]::-moz-range-thumb{width:2px;height:12px;background:var(--mid);
         function effLW() {
             return grown ? Math.min(params.lineWidth, grown.lineWidth * 2.2) : params.lineWidth;
         }
-        function lwOf(t) { return Math.max(0.35, effLW() * (t.scale === undefined ? 1 : t.scale)); }
+        function famLaw() { return grown ? grown.family : params.family; }
+        // Rule 31: descendants shrink, the PEN does not — under family law
+        // every line draws at full width; structure carries the hierarchy.
+        function lwOf(t) {
+            const sc = famLaw() === 'on' ? 1 : (t.scale === undefined ? 1 : t.scale);
+            return Math.max(0.35, effLW() * sc);
+        }
 
         // a wrapped line jumps the page; break it so it renders as the two
         // (or more) real strokes a tiled sheet would show
@@ -2399,9 +2774,11 @@ input[type=range]::-moz-range-thumb{width:2px;height:12px;background:var(--mid);
                     endShape();
                 }
             };
+            const hs = hiddenSets();
             for (let i = 0; i < tendrils.length; i++) {
                 const t = tendrils[i];
                 if (t.erased) continue;
+                if (hs && hs.hid.has(t.id)) continue;
                 const pts = flowPath(tendrilPath(t));
                 if (pts.length < 2) continue;
                 const col = params.colorPalette[colIdxOf(t)];
@@ -2422,6 +2799,7 @@ input[type=range]::-moz-range-thumb{width:2px;height:12px;background:var(--mid);
             }
             // the vacancy doodles (symmetric replicas are separate entries)
             for (let i = 0; i < doodles.length; i++) {
+                if (hs && hs.hidD.has(i)) continue;
                 const d = doodles[i];
                 stroke(params.colorPalette[params.colorMode === 'mono' ? 0 : d.colIdx]);
                 strokeWeight(effLW());
@@ -2628,6 +3006,72 @@ input[type=range]::-moz-range-thumb{width:2px;height:12px;background:var(--mid);
             vacField = d; vacStamp = frameCount2;
         }
 
+        // ── POCKET ANALYSIS (rule 21 complete) ───────────────────────────
+        // Beyond "how big a disc fits here": every connected open region gets
+        // measured — area, centroid, dominant axis, elongation, deepest point
+        // (the local center), and whether it touches the page edge. Habitat
+        // (rule 44) is DERIVED from these measurements, never templated.
+        // Deterministic, draw-free, cached per vacancy rebuild.
+        let vacLabels = null, vacPockets = null, vacPocketStamp = -2;
+        function buildPockets() {
+            if (!vacField || frameCount2 - vacStamp > 60) buildVacancy();
+            if (vacPocketStamp === vacStamp && vacPockets) return;
+            const N = VACN, sc = W / N;
+            if (!vacLabels) vacLabels = new Int32Array(N * N);
+            vacLabels.fill(-1);
+            const minR = Math.max(1.5, clr() * 0.45 / sc);
+            const q = [];
+            vacPockets = [];
+            for (let seed = 0; seed < N * N; seed++) {
+                if (vacLabels[seed] >= 0 || vacField[seed] < minR) continue;
+                const id = vacPockets.length;
+                q.length = 0; q.push(seed); vacLabels[seed] = id;
+                let head = 0, area = 0, sx = 0, sy = 0, sxx = 0, syy = 0, sxy = 0,
+                    deep = 0, di = seed, edge = false;
+                while (head < q.length) {
+                    const j = q[head++];
+                    const x = j % N, y = (j / N) | 0;
+                    area++; sx += x; sy += y; sxx += x * x; syy += y * y; sxy += x * y;
+                    if (vacField[j] > deep) { deep = vacField[j]; di = j; }
+                    if (x === 0 || y === 0 || x === N - 1 || y === N - 1) edge = true;
+                    if (x > 0         && vacLabels[j - 1] < 0 && vacField[j - 1] >= minR) { vacLabels[j - 1] = id; q.push(j - 1); }
+                    if (x < N - 1     && vacLabels[j + 1] < 0 && vacField[j + 1] >= minR) { vacLabels[j + 1] = id; q.push(j + 1); }
+                    if (y > 0         && vacLabels[j - N] < 0 && vacField[j - N] >= minR) { vacLabels[j - N] = id; q.push(j - N); }
+                    if (y < N - 1     && vacLabels[j + N] < 0 && vacField[j + N] >= minR) { vacLabels[j + N] = id; q.push(j + N); }
+                }
+                const mx = sx / area, my = sy / area;
+                const cxx = sxx / area - mx * mx, cyy = syy / area - my * my, cxy = sxy / area - mx * my;
+                const tr2 = cxx + cyy, det = cxx * cyy - cxy * cxy;
+                const disc = Math.sqrt(Math.max(0, tr2 * tr2 / 4 - det));
+                const l1 = tr2 / 2 + disc, l2 = tr2 / 2 - disc;
+                vacPockets.push({
+                    area: area * sc * sc,
+                    cx: (mx + 0.5) * sc, cy: (my + 0.5) * sc,
+                    axis: 0.5 * Math.atan2(2 * cxy, cxx - cyy),
+                    elong: Math.sqrt(Math.max(l1, 1e-6) / Math.max(l2, 1e-6)),
+                    deep: deep * sc,
+                    deepX: ((di % N) + 0.5) * sc, deepY: (((di / N) | 0) + 0.5) * sc,
+                    edge,
+                });
+            }
+            vacPocketStamp = vacStamp;
+        }
+        function pocketAt(x, y) {
+            buildPockets();
+            const gx = Math.min(VACN - 1, Math.max(0, Math.floor(wrapX(x) * VACN / W)));
+            const gy = Math.min(VACN - 1, Math.max(0, Math.floor(wrapY(y) * VACN / H)));
+            const l = vacLabels[gy * VACN + gx];
+            return l >= 0 ? vacPockets[l] : null;
+        }
+        function habitatOf(pk) {
+            if (!pk) return 'tight';
+            const c = clr();
+            if (pk.elong > 2.6 && pk.deep < c * 3) return 'channel';
+            if (pk.edge && pk.area < c * c * 40) return 'corner';
+            if (!pk.edge && pk.area < c * c * 40) return 'enclosed';
+            return pk.deep > c * 4 ? 'field' : 'ground';
+        }
+
         // free radius in px of the biggest empty disc centered near (x, y)
         function vacAt(x, y) {
             if (!vacField || frameCount2 - vacStamp > 60) buildVacancy();
@@ -2675,12 +3119,20 @@ input[type=range]::-moz-range-thumb{width:2px;height:12px;background:var(--mid);
                 const cHere = Math.max(params.lineWidth * 2.2, c * maskScaleAt(x, y));
                 // a tree keeps its ground airy: no infill near the roots
                 if (params.origin === 'tree' && y > H * 0.72) continue;
+                // density target (rule 23): a region at its target is done,
+                // even though more lines would still FIT there
+                if (composePlan) {
+                    const occ = 1 - Math.min(1, vacAt(x, y) / (cHere * 3));
+                    if (occ >= targetAt(x, y)) continue;
+                }
                 // inside a shape mask, pockets are as narrow as the shape's
                 // strokes — accept smaller ones
                 if (!discFree(x, y, maskArr ? cHere * 0.9 : cHere * 2.8, cHere)) continue;
                 // search wide: even the middle of a large hole must be
                 // reachable — the branch simply travels farther to claim it
-                const anchor = nearestInkPoint(x, y, maskArr ? cHere * 40 : c * 22);
+                // with the vacancy eye on, a colonist may take a longer
+                // tether — it can SEE the far pocket, so let it travel there
+                const anchor = nearestInkPoint(x, y, maskArr ? cHere * 40 : c * (params.vacancy === 'on' ? 34 : 22));
                 if (!anchor) {
                     // a disconnected island of the shape (a separate letter):
                     // it gets its own root organism
@@ -2700,6 +3152,10 @@ input[type=range]::-moz-range-thumb{width:2px;height:12px;background:var(--mid);
                 }
                 const parent = tendrils[anchor.id];
                 if (!parent || parent.erased || parent.state !== 'done') continue;
+                if (params.family === 'on') {
+                    const po = ornOf(parent);
+                    if (po && po.gen >= 4) continue;   // decorators host no colonists
+                }
                 if (anchor.idx >= parent.coilStartIdx - 10) continue;  // never sprout off a spiral or its neck
                 if (parent.zigRanges.some(r => anchor.idx >= r.a - 4 && anchor.idx <= r.b + 4)) continue; // nor a zigzag
                 if ((parent.hosts || 0) >= (lvl < 1 ? 12 : 4)) continue;
@@ -2738,9 +3194,20 @@ input[type=range]::-moz-range-thumb{width:2px;height:12px;background:var(--mid);
                 kid.parentRef = parent;
                 kid.colIdx = leanestInk();   // colonists even the palette out
                 kid.viaWave = true;
+                if (params.family === 'on') {
+                    kid.orn = makeHeritage(kid.id, ornOf(parent), parent.curlsMade);
+                    kid.scale = Math.max(0.45, lvl * Math.pow(kid.orn.ratio, Math.min(kid.orn.gen, 2)));
+                }
                 const trek = Math.hypot(x - anchor.x, y - anchor.y) / STEP;
                 kid.minSteps = Math.floor(trek + random(25, 80) * params.lengthScale);
                 kid.maxSteps = Math.floor(trek + random(80, 220) * params.lengthScale);
+                if (params.family === 'on' && kid.orn) {
+                    // generational freedom applies to life BEYOND the trek —
+                    // the walk to the pocket is a given, not a lifestyle
+                    const g = kid.orn.gen, m = g <= 1 ? 1.2 : g === 2 ? 0.8 : 0.55;
+                    kid.minSteps = Math.floor(trek + (kid.minSteps - trek) * m);
+                    kid.maxSteps = Math.floor(trek + (kid.maxSteps - trek) * m);
+                }
                 kid.trail.push({ x: anchor.x, y: anchor.y, idx: -1 });
                 // the branch needs a clear road from its parent to the pocket
                 let runway = true;
@@ -2865,6 +3332,7 @@ input[type=range]::-moz-range-thumb{width:2px;height:12px;background:var(--mid);
         // never-touch contract as a grown one.
         function commitDrawnStroke(pts) {
             if (!pts || pts.length < 3) return false;
+            commitReveal();
             if (grown) grown.lineWidth = Math.min(grown.lineWidth, params.lineWidth);
             const t = new Tendril(tendrils.length, 0);
             t.state = 'growing';
@@ -2893,6 +3361,7 @@ input[type=range]::-moz-range-thumb{width:2px;height:12px;background:var(--mid);
         // stamp a chosen glyph, auto-sized to the room available and aligned
         // to whatever line is closest — same rules the grown ones follow
         function stampAt(x, y) {
+            commitReveal();
             const c = clr();
             let r = c * 1.0;
             if (!discFree(x, y, r + c * 0.5)) return false;
@@ -2916,11 +3385,13 @@ input[type=range]::-moz-range-thumb{width:2px;height:12px;background:var(--mid);
 
         // lift whatever sits under the cursor back off the paper
         function eraseAt(x, y) {
+            commitReveal();
             const c = clr(), R = c * 2.4;
             for (let i = doodles.length - 1; i >= 0; i--) {
                 const d = doodles[i];
                 if (d.cx === undefined) continue;
                 if (Math.hypot(d.cx - x, d.cy - y) < R + (d.cr || 0)) {
+                    doodleUnmark(d);
                     doodles.splice(i, 1);
                     return true;
                 }
@@ -2942,6 +3413,7 @@ input[type=range]::-moz-range-thumb{width:2px;height:12px;background:var(--mid);
         }
 
         function plantAt(x, y) {
+            commitReveal();
             if (grown) grown.lineWidth = Math.min(grown.lineWidth, params.lineWidth);
             const c = clr();
             // open-enough ground: plant a fresh root at (or just beside) the click
@@ -3010,6 +3482,101 @@ input[type=range]::-moz-range-thumb{width:2px;height:12px;background:var(--mid);
         // nothing regrows until the user explicitly asks. armSetting is a
         // chrome hook — a no-op stub here so the engine runs headless.
         function armSetting() { if (typeof paintArmed === 'function') paintArmed(); }
+
+        // ── TIME SCRUB (undo / redo) ─────────────────────────────────────
+        // Cmd/Ctrl-Z steps the finished drawing backward one line at a time;
+        // Shift (or Ctrl-Y) steps it forward again. It is a VIEW of the
+        // drawing's own chronology — nothing is destroyed while scrubbing.
+        // The moment you draw something new, the hidden tail is truly erased,
+        // grid and all, so the sheet you see is always the sheet the engine
+        // reasons about. Never-touch survives: hidden lines either stay in
+        // the grid (while scrubbing) or leave it completely (on commit).
+        let revealCut = -1;      // -1 = show everything
+        let committingHidden = null;   // set only while commitReveal erases
+
+        // The drawing's chronology, honestly: grown lines in creation order,
+        // doodles at the moment they were stamped (d.seq = how many lines
+        // existed then), hand-planted lines after. Mask contour walls are
+        // infrastructure, not history — they are never scrubbed.
+        function revealList() {
+            const out = [];
+            for (let i = 0; i < tendrils.length; i++) {
+                const t = tendrils[i];
+                if (!t.erased && t.idx > 1 && !t.contour) out.push({ t, seq: i });
+            }
+            for (let i = 0; i < doodles.length; i++) {
+                const d = doodles[i];
+                out.push({ d, di: i, seq: (d.seq === undefined ? tendrils.length : d.seq) + (i + 1) / 1e4 });
+            }
+            out.sort((a, b) => a.seq - b.seq);
+            return out;
+        }
+        function revealTotal() { return revealList().length; }
+        function hiddenSets() {
+            if (revealCut < 0) return null;
+            const list = revealList();
+            const hid = new Set(), hidD = new Set();
+            for (let i = Math.min(revealCut, list.length); i < list.length; i++) {
+                const e = list[i];
+                if (e.t) hid.add(e.t.id); else hidD.add(e.di);
+            }
+            return { hid, hidD };
+        }
+        function undoStep() {
+            if (typeof isLooping === 'function' && isLooping()) return;
+            if (revealCut < 0) revealCut = revealTotal();
+            if (revealCut > 0) revealCut--;
+            repaintInk();
+        }
+        function redoStep() {
+            if (typeof isLooping === 'function' && isLooping()) return;
+            if (revealCut < 0) return;
+            revealCut++;
+            if (revealCut >= revealTotal()) revealCut = -1;
+            repaintInk();
+        }
+        function doodleUnmark(d) {
+            const R = (d.cr || 20) * 1.3 + 4;
+            const reach = Math.ceil(R / cellSize) + 1;
+            const cgx = Math.floor(d.cx / cellSize), cgy = Math.floor(d.cy / cellSize);
+            // markSym stamps the base as -998 AND ghost replicas under the
+            // derived ghost ids — a doodle's ground at THIS site may carry
+            // either, so both are cleared (ghost ids: -(3000 + 998*8 + k))
+            const isDoodleMark = id => id === -998 || (id <= -(3000 + 998 * 8) && id >= -(3000 + 998 * 8 + 7));
+            for (let dy = -reach; dy <= reach; dy++) for (let dx = -reach; dx <= reach; dx++) {
+                const key = cellKey(cgx + dx, cgy + dy);
+                const arr = grid.get(key);
+                if (!arr) continue;
+                const kept = arr.filter(pt => !(isDoodleMark(pt.id) &&
+                    (pt.x - d.cx) ** 2 + (pt.y - d.cy) ** 2 <= R * R));
+                if (kept.length !== arr.length) {
+                    if (kept.length) grid.set(key, kept); else grid.delete(key);
+                }
+            }
+        }
+        function commitReveal() {
+            if (revealCut < 0) return;
+            const hs = hiddenSets();
+            committingHidden = hs.hid;                     // fence the cascade
+            const list = revealList();
+            for (let i = list.length - 1; i >= 0; i--) {   // newest first: kids before parents
+                const e = list[i];
+                if (e.t && hs.hid.has(e.t.id) && !e.t.erased) e.t.eraseSelf();
+            }
+            committingHidden = null;
+            // a stub whose every continuation was hidden holds no resolution —
+            // the second law tidies it (the only cascade allowed past the cut)
+            for (const t of tendrils) {
+                if (t.erased || t.contour || t.coilPath || t.plainEnd || t.voidEnd) continue;
+                if (t.state === 'done' && (t.branches | 0) === 0 && !(t.hosts > 0) &&
+                    t.forkTrailAt !== undefined && t.forkTrailAt >= t.trail.length - 1) t.eraseSelf();
+            }
+            [...hs.hidD].sort((a, b) => b - a).forEach(di => {
+                doodleUnmark(doodles[di]);
+                doodles.splice(di, 1);
+            });
+            revealCut = -1;
+        }
 
         // repaint what is on the sheet in the current paint. Settled: the full
         // final render (which reads the grown law via symLaw/tileLaw/styleLaw).
@@ -3160,6 +3727,8 @@ input[type=range]::-moz-range-thumb{width:2px;height:12px;background:var(--mid);
         // every visible stroke, as {ci, w, pts} — the common currency of the
         // exporters
         function collectStrokes() {
+            // the plot must match the sheet: a scrubbed drawing exports scrubbed
+            const hs = hiddenSets();
             const xfs = symXforms(), out = [];
             const push = (ci, w, pts) => {
                 for (const seg of splitWrapped(pts)) if (seg.length > 1) out.push({ ci, w, pts: seg });
@@ -3167,6 +3736,7 @@ input[type=range]::-moz-range-thumb{width:2px;height:12px;background:var(--mid);
             for (let i = 0; i < tendrils.length; i++) {
                 const t = tendrils[i];
                 if (t.erased) continue;
+                if (hs && hs.hid.has(t.id)) continue;
                 const pts = flowPath(tendrilPath(t));
                 if (pts.length < 2) continue;
                 const ci = colIdxOf(t), w = lwOf(t);
@@ -3174,6 +3744,7 @@ input[type=range]::-moz-range-thumb{width:2px;height:12px;background:var(--mid);
                 for (const xf of xfs) push(ci, w, pts.map(q => xf(q)));
             }
             for (let i = 0; i < doodles.length; i++) {
+                if (hs && hs.hidD.has(i)) continue;
                 const d = doodles[i];
                 const ci = params.colorMode === 'mono' ? 0 : d.colIdx;
                 for (const poly of d.polys) push(ci, effLW(), poly);
@@ -3189,10 +3760,14 @@ input[type=range]::-moz-range-thumb{width:2px;height:12px;background:var(--mid);
         // Retraced spans lie exactly on the original, so the plot looks
         // identical; the pen simply passes twice.
         function familyPaths() {
+            // scrub-safe: hiding is newest-first, so a hidden line can never
+            // be the parent of a visible one — filtering here cannot orphan
+            const hs = hiddenSets();
             const kidsOf = new Map();
             const items = [];
             for (const t of tendrils) {
                 if (t.erased || t.idx < 2 || t.trail.length < 2) continue;
+                if (hs && hs.hid.has(t.id)) continue;
                 items.push(t);
                 if (t.parentRef && !t.parentRef.erased) {
                     if (!kidsOf.has(t.parentRef.id)) kidsOf.set(t.parentRef.id, []);
@@ -3340,9 +3915,11 @@ input[type=range]::-moz-range-thumb{width:2px;height:12px;background:var(--mid);
             // ink layer — except in one-line mode, whose whole point is that
             // the pen never lifts. (A plotter renders these as tiny taps.)
             if (params.stitch !== 'single') {
+                const hsD = hiddenSets();
                 const dotRows = [[], [], []];
                 for (const t of tendrils) {
                     if (t.erased) continue;
+                    if (hsD && hsD.hid.has(t.id)) continue;
                     const ci = colIdxOf(t), wl2 = lwOf(t);
                     const push = p => {
                         dotRows[ci].push('<circle cx="' + p.x.toFixed(1) + '" cy="' + p.y.toFixed(1) +
@@ -3473,7 +4050,10 @@ input[type=range]::-moz-range-thumb{width:2px;height:12px;background:var(--mid);
 
         // curated configurations that show the system at its best
         const PRESETS = {
-            classic: {},
+            ornate: { vacancy: 'on', rhythm: 'full', curl: 'on', ret: 'gentle',
+                      family: 'on', compose: 'on', grain: 'on' },
+            classic: { vacancy: 'off', rhythm: 'off', curl: 'off', ret: 'off',
+                       family: 'off', compose: 'off', grain: 'off' },
             circuit: { style: 'angular', latticeAngle: 90, endings: 'squares', lineWidth: 3,
                        doodles: 'geometric', bg: '#1e1c18',
                        colorPalette: ['#e8e2d4', '#c97b4a', '#7fa08a'] },
@@ -3608,7 +4188,7 @@ document.querySelectorAll('input[type=range]').forEach(r => {
   liveVal(r);
 });
 
-let openDrawer = null, activePreset = 'classic';
+let openDrawer = null, activePreset = 'ornate';
 function drawer(name){
   const same = openDrawer === name;
   document.querySelectorAll('.drawer').forEach(d => d.classList.remove('on'));
@@ -3686,13 +4266,20 @@ setInterval(function(){
     pr.style.width = '0%';
     st.innerHTML = brushMode !== 'plant'
       ? '<b>● ' + brushMode + '</b> · esc'
-      : total + ' lines';
+      : (typeof revealCut !== 'undefined' && revealCut >= 0
+          ? revealCut + ' of ' + revealTotal() + ' · &#8984;Z'
+          : total + ' lines');
   }
 }, 400);
 
 addEventListener('keydown', e => {
   if (/^(INPUT|SELECT|TEXTAREA)$/.test(e.target.tagName)) return;
   const k = e.key.toLowerCase();
+  if (e.metaKey || e.ctrlKey) {
+    if (k === 'z') { e.preventDefault(); if (e.shiftKey) redoStep(); else undoStep(); }
+    else if (k === 'y') { e.preventDefault(); redoStep(); }
+    return;   // never let browser combos fall through to the plain keys
+  }
   if (k === 'escape') { if (openDrawer) drawer(null); else setTool('plant'); }
   else if (k === 'arrowleft') previousSeed();
   else if (k === 'arrowright') nextSeed();
@@ -3868,6 +4455,14 @@ function loadSettings(){
     const saved = JSON.parse(raw);
     if (Array.isArray(saved.__presetKeys)) presetKeys = saved.__presetKeys;
     if (typeof saved.__activePreset === 'string') activePreset = saved.__activePreset;
+    // a setup saved before the ornament grammar upgrades INTO it wholesale —
+    // the old blob pins vacancy/rhythm 'off', which would leave the grammar
+    // half-on; the deliberate default experience is the full voice
+    if (!('curl' in saved)) {
+        for (const k of ['vacancy', 'rhythm', 'curl', 'ret', 'family', 'compose', 'grain'])
+            params[k] = defaultParams[k];
+        activePreset = 'ornate';
+    }
     delete saved.__presetKeys; delete saved.__activePreset;
     // anything that arrived in the share link wins over local settings
     for (const k in saved) if (k in params && !(fromHash && fromHash[k])) params[k] = saved[k];
@@ -3885,7 +4480,7 @@ function loadSettings(){
 const _reset = window.resetParameters;
 window.resetParameters = function(){
   try { localStorage.removeItem(STORE); } catch (e) {}
-  activePreset = 'classic';        // the shipped defaults ARE the classic plate
+  activePreset = 'ornate';         // the shipped defaults ARE the ornate plate
   _reset(); paintChrome();
 };
 
@@ -3922,6 +4517,10 @@ function restoreKeep(i){
   const e = shelf[i]; if (!e) return;
   let saved; try { saved = JSON.parse(atob(e.p)); } catch (err) { return; }
   for (const k in saved) if (k in params) params[k] = saved[k];
+  // a keep bottled before the ornament grammar reproduces the drawing it
+  // photographed: missing switches read as off, like old share links
+  for (const k of ['vacancy', 'rhythm', 'curl', 'ret', 'family', 'compose', 'grain'])
+    if (!(k in saved)) params[k] = 'off';
   activePreset = 'kept';
   presetKeys = [];         // a kept recipe is self-contained; no preset to revert
   syncControls(); paintChrome(); saveSettings();

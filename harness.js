@@ -75,6 +75,7 @@ function makeApi() {
     ;return {
       get params(){ return params }, get tendrils(){ return tendrils },
       get doodles(){ return doodles },
+      get composePlan(){ return typeof composePlan !== 'undefined' ? composePlan : null },
       setMask(m){ maskArr = m; if (typeof maskDistField !== 'undefined') maskDistField = m && typeof maskDistance === 'function' ? maskDistance() : null; },
       initializeSystem, draw, isBlocked, W, H,
       tendrilPath: (typeof tendrilPath === 'function' ? tendrilPath : null),
@@ -195,13 +196,54 @@ const CONFIGS = [
   { name: 'mask-thin-off', set: { clearance: 22 }, mask: 'thin', floor: 0.10, minLines: 2, slowMs: 15000 },
   { name: 'mask-thin-vac', set: { vacancy: 'on', clearance: 22 }, mask: 'thin', floor: 0.10, minLines: 2, slowMs: 15000 },
   { name: 'vac-tile', set: { vacancy: 'on', tile: 'on' }, floor: 0.95 },
+  // the ornament grammar (RULEBOOK 21-48), one switch at a time and then all
+  // together — rule 48: every mechanism stays independently checkable
+  { name: 'rhythm-full', set: { rhythm: 'full' }, floor: 0.85 },
+  { name: 'curl', set: { curl: 'on' }, floor: 0.85 },
+  { name: 'return', set: { ret: 'strong' }, floor: 0.85 },
+  { name: 'family', set: { family: 'on' }, floor: 0.75 },  // hierarchy needs air: families trade raw coverage for structure
+  { name: 'compose', set: { compose: 'on' }, floor: 0.55 },
+  { name: 'grain', set: { grain: 'on', vacancy: 'on' }, floor: 0.85 },
+  { name: 'ornament-all', set: { vacancy: 'on', rhythm: 'full', curl: 'on', ret: 'gentle',
+                                 family: 'on', compose: 'on', grain: 'on' }, floor: 0.50, slowMs: 20000 },
+  { name: 'curl-tile', set: { curl: 'on', tile: 'on' }, floor: 0.90 },
 ];
+
+// A floor can't catch a mechanism that silently dies — a dead switch scores
+// like a no-op. Each ornament config asserts its mechanism actually FIRED.
+const EFFICACY = {
+  'curl':         api => api.tendrils.reduce((a, t) => a + (t.curlsMade || 0), 0) > 0 ? null : 'no curls fired',
+  'curl-tile':    api => api.tendrils.reduce((a, t) => a + (t.curlsMade || 0), 0) > 0 ? null : 'no curls fired',
+  'rhythm-full':  api => api.tendrils.some(t => t.rhythm && t.rhythm.phrases > 0) ? null : 'no phrase ever transformed',
+  'family':       api => {
+    const scales = new Set(api.tendrils.filter(t => !t.erased && t.idx > 1).map(t => t.scale.toFixed(2)));
+    return scales.size >= 2 ? null : 'scale ladder never engaged';
+  },
+  'compose':      api => {
+    if (!api.composePlan) return 'no composition plan';
+    for (const v of api.composePlan.voids) {
+      for (const t of api.tendrils) {
+        if (t.erased) continue;
+        for (let i = 0; i < t.trail.length; i += 5) {
+          const q = t.trail[i];
+          if ((q.x - v.x) ** 2 + (q.y - v.y) ** 2 < (v.r * 0.85) ** 2) return 'ink inside a protected void';
+        }
+      }
+    }
+    return null;
+  },
+  'ornament-all': api => api.tendrils.reduce((a, t) => a + (t.curlsMade || 0), 0) > 0 ? null : 'no curls in the full grammar',
+};
 const SEEDS = [12345, 4242, 99, 777, 31337];
 
 const results = {}, failures = [];
 for (const cfg of CONFIGS) {
   for (const seed of SEEDS) {
     const api = makeApi();                       // fresh module state per run
+    // the app now ships ornament-on; the harness pins every switch off so
+    // legacy goldens stay meaningful, and each config opts in explicitly
+    Object.assign(api.params, { vacancy: 'off', rhythm: 'off', curl: 'off', ret: 'off',
+                                family: 'off', compose: 'off', grain: 'off' });
     Object.assign(api.params, JSON.parse(JSON.stringify(cfg.set)));
     api.params.seed = seed;
     api.params.render = 'instant';
@@ -217,6 +259,10 @@ for (const cfg of CONFIGS) {
     let guard = 0;
     while (api.isLooping() && guard++ < 30000) api.draw();
     const ms = Date.now() - t0;
+    if (EFFICACY[cfg.name]) {
+      const eff = EFFICACY[cfg.name](api);
+      if (eff) failures.push('  \u2717 ' + cfg.name + ':' + seed + ': ' + eff);
+    }
     const key = cfg.name + ':' + seed;
     const m = measure(api, maskFn);
     m.ms = ms;

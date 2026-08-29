@@ -14,6 +14,12 @@ Tags: **[NOW]** build next · **[NEXT]** soon after · **[LATER]** earned, not s
 
 ## Candidate rules 21–48 (added 2026-08-29)
 
+> **Status 2026-08-29, later the same day:** all 28 are implemented in the
+> engine as independently switchable, seed-isolated mechanisms (rule 47/48
+> honored: private generators throughout; with every switch off the legacy
+> output is hash-identical across the 135-run harness). Shipped ON by
+> default as the "ornate" plate; "classic" pins the plain grammar.
+
 21. **Vacancy awareness** [NOW]. Every open region has measurable properties: area,
     width, distance to ink, distance to boundary, dominant axis, connectivity, and
     local center. Lines may query this information before growing.
