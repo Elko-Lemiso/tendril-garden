@@ -6,8 +6,9 @@
 //  seeds, asserts the invariants the project promises, and compares a
 //  geometry hash against a blessed golden file.
 //
-//    node harness.js check    → exit 1 on any invariant failure or hash drift
-//    node harness.js bless    → accept current geometry as the new golden
+//    node harness.js check                       → correctness + performance
+//    node harness.js check --skip-performance    → stable correctness only (CI)
+//    node harness.js bless                       → accept new geometry
 //
 //  INVARIANTS (always enforced, never blessable):
 //    • zero dead ends       (every visible line resolves or forks or is a
@@ -28,6 +29,7 @@ const path = require('path');
 const FILE = path.join(__dirname, 'index.html');
 const GOLDEN = path.join(__dirname, 'golden.json');
 const MODE = process.argv[2] || 'check';
+const SKIP_PERFORMANCE = process.argv.includes('--skip-performance');
 
 // ── engine extraction: anchored on the engine banner, because the file
 // also inlines all of p5.js in an earlier <script> block ──
@@ -279,7 +281,8 @@ for (const cfg of CONFIGS) {
       if (v.length >= 2 && Math.max(...v) / Math.max(1, Math.min(...v)) > 1.6)
         failures.push(key + ': shape imbalance ' + JSON.stringify(m.shapes));
     }
-    if (ms > (cfg.slowMs || 8000)) failures.push(key + ': slow (' + ms + 'ms)');
+    if (!SKIP_PERFORMANCE && ms > (cfg.slowMs || 8000))
+      failures.push(key + ': slow (' + ms + 'ms)');
   }
 }
 
@@ -293,9 +296,13 @@ if (MODE === 'show') {
 if (MODE === 'bless') {
   const golden = {};
   for (const k in results) golden[k] = results[k].hash;
+  if (failures.length) {
+    console.log('REFUSING TO BLESS — invariant failures:');
+    failures.forEach(f => console.log('  ' + f));
+    process.exit(1);
+  }
   fs.writeFileSync(GOLDEN, JSON.stringify(golden, null, 1));
   console.log('BLESSED', Object.keys(golden).length, 'runs');
-  if (failures.length) { console.log('WARNING — invariant failures at bless time:'); failures.forEach(f => console.log('  ' + f)); process.exit(1); }
   process.exit(0);
 }
 
@@ -306,9 +313,13 @@ if (fs.existsSync(GOLDEN)) {
     if (!results[k]) drift.push(k + ': missing from run');
     else if (results[k].hash !== golden[k]) drift.push(k + ': geometry changed');
   }
+  for (const k in results) {
+    if (!(k in golden)) drift.push(k + ': no golden hash — run `node harness.js bless`');
+  }
 } else drift.push('no golden.json — run `node harness.js bless` first');
 
 console.log('runs:', Object.keys(results).length);
+if (SKIP_PERFORMANCE) console.log('performance budgets: skipped');
 const worst = Object.entries(results).sort((a, b) => a[1].coverage - b[1].coverage)[0];
 console.log('lowest coverage:', worst[0], worst[1].coverage);
 if (failures.length) { console.log('\nINVARIANT FAILURES:'); failures.forEach(f => console.log('  ✗ ' + f)); }

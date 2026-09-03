@@ -1,0 +1,20 @@
+{
+  "name": "tendril-garden",
+  "version": "1.0.0",
+  "private": true,
+  "description": "A deterministic generative line-drawing studio built around collision-aware growth.",
+  "license": "UNLICENSED",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Elko-Lemiso/tendril-garden.git"
+  },
+  "scripts": {
+    "test": "node harness.js check --skip-performance",
+    "test:performance": "node harness.js check",
+    "test:show": "node harness.js show",
+    "test:bless": "node harness.js bless"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
