@@ -1,1 +1,5 @@
 .vercel
+
+# Local snapshots kept while iterating on the single-file studio.
+index.pre-ornament.html
+index.pre-simplify.html
