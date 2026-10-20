@@ -9,12 +9,22 @@
     "url": "https://github.com/Elko-Lemiso/tendril-garden.git"
   },
   "scripts": {
-    "test": "node harness.js check --skip-performance",
+    "test": "node --test tests/film.test.cjs && node harness.js check --skip-performance",
+    "test:film": "node --test tests/*.test.cjs",
+    "build:film": "node tools/build-film.cjs",
+    "film:render": "node tools/render-film.cjs",
+    "dev": "node tools/serve.cjs",
     "test:performance": "node harness.js check",
     "test:show": "node harness.js show",
     "test:bless": "node harness.js bless"
   },
   "engines": {
     "node": ">=18"
+  },
+  "devDependencies": {
+    "@napi-rs/canvas": "1.0.12",
+    "esbuild": "0.28.2",
+    "ffmpeg-static": "5.3.0",
+    "mediabunny": "1.62.0"
   }
 }

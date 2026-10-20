@@ -85,6 +85,7 @@ function makeApi() {
       collectStrokes: (typeof collectStrokes === 'function' ? collectStrokes : null),
       stitchStrokes: (typeof stitchStrokes === 'function' ? stitchStrokes : null),
       familyPaths: (typeof familyPaths === 'function' ? familyPaths : null),
+      getFilmScene: (typeof getFilmScene === 'function' ? getFilmScene : null),
     };`);
   const api = fn(...Object.values(stubs));
   api.isLooping = () => state.looping;
@@ -173,6 +174,10 @@ function measure(api, wantMask) {
   };
 }
 
+module.exports = { makeApi };
+if (require.main === module) runHarness();
+
+function runHarness() {
 // ── the matrix ──
 const CONFIGS = [
   { name: 'default', set: {} , floor: 0.90 },
@@ -326,3 +331,4 @@ if (failures.length) { console.log('\nINVARIANT FAILURES:'); failures.forEach(f 
 if (drift.length) { console.log('\nGEOMETRY DRIFT (re-bless if intentional):'); drift.forEach(f => console.log('  ~ ' + f)); }
 if (!failures.length && !drift.length) console.log('\nALL GREEN');
 process.exit(failures.length || drift.length ? 1 : 0);
+}
