@@ -229,6 +229,7 @@ input[type=range]::-moz-range-thumb{width:2px;height:12px;background:var(--mid);
   .railext.on{display:flex}
 }
 </style>
+<link rel="stylesheet" href="film.css">
 </head>
 <body>
 
@@ -269,6 +270,7 @@ input[type=range]::-moz-range-thumb{width:2px;height:12px;background:var(--mid);
     <button class="act prime eng" onclick="newDrawing()" title="grow a fresh drawing (space)">New drawing<i class="armdot" id="armdot" title="settings changed — they shape this next drawing"></i></button>
     <button class="act eng" onclick="newInks()" title="fresh colors on this drawing (i)">New inks</button>
     <button class="act eng" onclick="keepDrawing()" title="keep this drawing on the shelf (k)">Keep</button>
+    <button class="act eng" onclick="TendrilFilmUI.open()">Make a film</button>
     <span class="inkname eng" id="inkname"></span>
     <span class="spacer"></span>
     <button class="act quiet eng" data-d="bench" onclick="drawer('bench')">Everything else<span class="keptn" id="kept-count"></span></button>
@@ -400,6 +402,7 @@ input[type=range]::-moz-range-thumb{width:2px;height:12px;background:var(--mid);
               <button class="word eng" onclick="downloadPNG()">PNG</button>
               <button class="word eng" onclick="downloadSVG()">SVG</button>
               <button class="word eng" onclick="downloadAnimatedSVG()">Animated SVG</button>
+              <button class="word eng" onclick="TendrilFilmUI.open()">Film</button>
               <button class="word eng" id="share-btn" onclick="copyShareLink()">Link &#8599;</button>
             </div></div>
         </div>
@@ -3761,6 +3764,34 @@ input[type=range]::-moz-range-thumb{width:2px;height:12px;background:var(--mid);
             return out;
         }
 
+        // Snapshot existing visible geometry and current paint. No simulation,
+        // random calls or armed structural settings are changed by film export.
+        function getFilmScene() {
+            if (typeof isLooping === 'function' && isLooping()) {
+                const error = new Error('Let the drawing finish growing first.');
+                error.code = 'GROWING';
+                throw error;
+            }
+            const hs = hiddenSets(), xfs = symXforms(), dots = [];
+            for (const t of tendrils) {
+                if (t.erased || (hs && hs.hid.has(t.id)) || tendrilPath(t).length < 2) continue;
+                const ci = colIdxOf(t), r = lwOf(t);
+                for (const points of [t.coilPath, t.originCoil]) if (points && points.length) {
+                    const p = points[points.length - 1];
+                    dots.push({ x: p.x, y: p.y, r, ci });
+                    for (const xf of xfs) { const q = xf(p); dots.push({ x: q.x, y: q.y, r, ci }); }
+                }
+            }
+            for (let i = 0; i < doodles.length; i++) {
+                if (hs && hs.hidD.has(i)) continue;
+                const d = doodles[i], ci = params.colorMode === 'mono' ? 0 : d.colIdx;
+                for (const dot of d.dots) dots.push({ x: dot.x, y: dot.y, r: dot.r, ci });
+            }
+            return JSON.parse(JSON.stringify({ version: 1, width: W, height: H,
+                seed: (grownParams || params).seed, background: params.bg,
+                palette: params.colorPalette, strokes: collectStrokes(), dots }));
+        }
+
         // ── ONE LINE PER FAMILY ──
         // The deepest plotter mode: walk each family tree depth-first, drawing
         // every branch on the way out and retracing it on the way back — the
@@ -4564,5 +4595,8 @@ addEventListener('load', () => {
   paintChrome();
 });
 </script>
+<script src="film.js"></script>
+<script src="assets/film-encoder.js"></script>
+<script src="film-ui.js"></script>
 </body>
 </html>

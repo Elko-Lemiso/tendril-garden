@@ -17,6 +17,7 @@ The studio is a static browser application. Its drawing engine, interface, and a
 - Paint directly into the system with plant, draw, stamp, erase, and keep-clear tools.
 - Save up to 24 recipes on the local shelf, recolor a finished drawing without regrowing it, and share a recipe in the URL.
 - Export PNG, layered SVG, animated SVG, or plotter-oriented paths with optional stroke joining and paper sizing.
+- Turn the visible drawing into a silent 10–15 second short film, with a scrub-and-play preview and local MP4/WebM download.
 - Generate seamless tiles and use the quieter [`wallpaper.html`](wallpaper.html) view as a continuously changing display.
 
 ## The system
@@ -40,7 +41,35 @@ python3 -m http.server 4173
 
 Then open [http://localhost:4173](http://localhost:4173). Opening `index.html` directly also works in browsers that permit the required local-file APIs.
 
-No package installation is required. Node.js is used only by the regression harness.
+No package installation is required to use the studio or its film editor. The checked-in video encoder runs on your device; drawings are never uploaded.
+
+## Make a short film
+
+Choose **Make a film** after growing a drawing. The editor waits for growth to finish, snapshots the current visible paths and inks, and offers 10, 12 or 15 seconds in square, landscape or portrait format at 720p or 1080p. **Play from start** and the position slider use a fixed 30 fps timeline. Saving a film renders each frame with an explicit timestamp, rather than recording a real-time screen capture. A short final hold lets the finished drawing settle. There is no audio.
+
+MP4 and WebM encoding depend on the browser's WebCodecs support. Try another format/size if encoding is unavailable. The studio reports errors and supports cancellation; it never labels a failed export as saved. **Save film recipe** preserves the exact visible geometry, including hand edits, a mask or a scrubbed composition, for an offline render:
+
+```bash
+npm ci
+npm run film:render -- --recipe path/to/tendril-12345.film.json --output exports/my-film.mp4
+```
+
+Or grow an existing seed with the real studio engine and render it directly:
+
+```bash
+npm run film:render -- --seed 12345 --duration 12 --size 1080 --output exports/tendril-12345.mp4
+```
+
+The renderer writes a silent H.264 MP4, a final-frame PNG and the reusable film recipe. Existing files are not overwritten. `--size` accepts 360 (quick proofs), 720 or 1080; `--aspect` accepts `square`, `landscape` or `portrait`. Use `--help` for the complete command. Keep the recipe to reproduce manual changes; a seed alone recreates the default recipe for this engine revision.
+
+Preview, browser encoding and local rendering share `film.js`: final surviving paths are revealed by arc length in the same staggered order as the existing animated SVG. This is a film of the resolved drawing, not a replay of temporary growth that was later erased. It leaves the engine, its random stream and the current drawing unchanged. Identical scene/options/frame produce identical vector frames; codec bytes and antialiasing can differ between browser encoders and the local renderer.
+
+For this path-based composition, a direct frame renderer avoids adding a React/Remotion application or a Chromium capture runtime. Offline rendering uses native Canvas/Skia and FFmpeg; browser encoding uses Mediabunny and WebCodecs. Both call the same Canvas drawing function. No paid renderer or cloud account is required. To rebuild the committed browser encoder after changing its source:
+
+```bash
+npm run build:film
+npm run test:film
+```
 
 ## Test the engine
 
@@ -73,6 +102,10 @@ Only use `npm run test:bless` after reviewing an intentional geometry change; it
 | `wallpaper.html` | Passive full-screen variation with its own deliberately simpler engine |
 | `harness.js` | Dependency-free seeded regression and invariant harness |
 | `golden.json` | Expected geometry hashes for the 135-run matrix |
+| `film.js` | Shared deterministic timeline, path reveal and Canvas/SVG frame rendering |
+| `film-ui.js` / `film.css` | Film preview, settings, progress, cancellation and recipe download |
+| `assets/film-encoder.js` | Committed static browser encoder built from `tools/film-encode-entry.mjs` |
+| `tools/render-film.cjs` | Offline Canvas/FFmpeg MP4 renderer |
 | `PHILOSOPHY.md` | Courteous Growth as an algorithmic and visual philosophy |
 | `RULEBOOK.md` | Rules for extending the grammar without replacing emergence with motifs |
 | `vercel.json` | Static deployment and response-header configuration |
